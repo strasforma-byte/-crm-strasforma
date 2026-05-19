@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { db } from "@/lib/db";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,6 +26,7 @@ export default function PipelineView() {
   
   const [newPipeName, setNewPipeName] = useState("");
   const [newPipePublic, setNewPipePublic] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
 
   const visiblePipelines = useMemo(() => {
     return state.pipelines.filter(p => canViewPipeline(p));
@@ -34,27 +36,39 @@ export default function PipelineView() {
     return state.pipelines.find(p => p.id === activePipelineId) || visiblePipelines[0];
   }, [activePipelineId, state.pipelines, visiblePipelines]);
 
-  const handleCreatePipeline = () => {
-    if (!newPipeName) return;
+  const handleCreatePipeline = async () => {
+    if (!newPipeName) {
+      toast.error("Le nom du pipeline est requis");
+      return;
+    }
     
-    const newPipeline = {
-      id: "p" + (state.pipelines.length + 1),
-      name: newPipeName,
-      ownerId: state.currentUser.id,
-      visibility: newPipePublic ? "public" : "private",
-      columns: [
-        { id: "c1-" + Date.now(), name: "Nouveau Lead", order: 0, cards: [] },
-        { id: "c2-" + Date.now(), name: "Qualifié", order: 1, cards: [] },
-        { id: "c3-" + Date.now(), name: "Proposition", order: 2, cards: [] },
-        { id: "c4-" + Date.now(), name: "Gagné ✅", order: 3, cards: [] },
-      ]
-    };
+    setIsCreating(true);
+    try {
+      const newPipelineData = {
+        name: newPipeName,
+        ownerId: state.currentUser.id,
+        visibility: newPipePublic ? "public" : "private",
+        columns: [
+          { name: "Nouveau Lead", order: 0 },
+          { name: "Qualifié", order: 1 },
+          { name: "Proposition", order: 2 },
+          { name: "Gagné ✅", order: 3 },
+        ]
+      };
 
-    dispatch({ type: "UPDATE_PIPELINES", payload: [...state.pipelines, newPipeline] });
-    setActivePipelineId(newPipeline.id);
-    setIsNewPipelineOpen(false);
-    setNewPipeName("");
-    toast.success("Pipeline créé");
+      const savedPipeline = await db.insertPipeline(newPipelineData);
+      
+      dispatch({ type: "UPDATE_PIPELINES", payload: [...state.pipelines, savedPipeline] });
+      setActivePipelineId(savedPipeline.id);
+      setIsNewPipelineOpen(false);
+      setNewPipeName("");
+      toast.success("Pipeline créé avec succès");
+    } catch (error) {
+      console.error("Error creating pipeline:", error);
+      toast.error("Erreur lors de la création du pipeline");
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   return (
@@ -142,7 +156,9 @@ export default function PipelineView() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsNewPipelineOpen(false)}>Annuler</Button>
-            <Button className="bg-green-600" onClick={handleCreatePipeline}>Créer</Button>
+            <Button className="bg-green-600" onClick={handleCreatePipeline} disabled={isCreating}>
+              {isCreating ? "Création..." : "Créer"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

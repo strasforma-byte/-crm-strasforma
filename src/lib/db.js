@@ -127,14 +127,116 @@ export const db = {
     return data.map(mapPipeline)
   },
 
+  async getPipelineById(id) {
+    const { data, error } = await supabase
+      .from('pipelines')
+      .select(`
+        *,
+        pipeline_columns (
+          *,
+          pipeline_cards (*)
+        )
+      `)
+      .eq('id', id)
+      .single()
+    if (error) throw error
+    return mapPipeline(data)
+  },
+
   async insertPipeline(pipeline) {
-    const { data, error } = await supabase.from('pipelines').insert({
+    const { data: pipeData, error: pipeError } = await supabase.from('pipelines').insert({
       name: pipeline.name,
       owner_id: pipeline.ownerId,
       visibility: pipeline.visibility
     }).select().single()
+    
+    if (pipeError) throw pipeError
+
+    if (pipeline.columns && pipeline.columns.length > 0) {
+      const columnsToInsert = pipeline.columns.map(col => ({
+        pipeline_id: pipeData.id,
+        name: col.name,
+        order: col.order
+      }))
+      const { error: colError } = await supabase.from('pipeline_columns').insert(columnsToInsert)
+      if (colError) throw colError
+    }
+
+    return this.getPipelineById(pipeData.id)
+  },
+
+  async updatePipeline(id, updates) {
+    const { error } = await supabase.from('pipelines').update({
+      name: updates.name,
+      visibility: updates.visibility
+    }).eq('id', id)
+    
     if (error) throw error
-    return mapPipeline(data)
+    
+    // If columns are provided, we might need to handle them (complex due to add/remove/update)
+    // For now, let's keep it simple or implement a full sync
+    return this.getPipelineById(id)
+  },
+
+  async deletePipeline(id) {
+    const { error } = await supabase.from('pipelines').delete().eq('id', id)
+    if (error) throw error
+  },
+
+  // Pipeline Columns
+  async insertColumn(column) {
+    const { data, error } = await supabase.from('pipeline_columns').insert({
+      pipeline_id: column.pipelineId,
+      name: column.name,
+      order: column.order
+    }).select().single()
+    if (error) throw error
+    return data
+  },
+
+  async updateColumn(id, updates) {
+    const { data, error } = await supabase.from('pipeline_columns').update(updates).eq('id', id).select().single()
+    if (error) throw error
+    return data
+  },
+
+  async deleteColumn(id) {
+    const { error } = await supabase.from('pipeline_columns').delete().eq('id', id)
+    if (error) throw error
+  },
+
+  // Pipeline Cards
+  async insertCard(card) {
+    const { data, error } = await supabase.from('pipeline_cards').insert({
+      column_id: card.columnId,
+      contact_id: card.contactId,
+      title: card.title,
+      value: card.value,
+      priority: card.priority,
+      tags: card.tags,
+      order: card.order
+    }).select().single()
+    if (error) throw error
+    return data
+  },
+
+  async updateCard(id, updates) {
+    const { data, error } = await supabase.from('pipeline_cards').update({
+      column_id: updates.columnId,
+      contact_id: updates.contactId,
+      title: updates.title,
+      value: updates.value,
+      priority: updates.priority,
+      tags: updates.tags,
+      order: updates.order
+    }).eq('id', id).select().single()
+    if (error) throw error
+    return data
+  },
+
+  async deleteCard(id) {
+    const { error } = await supabase.from('pipeline_cards').delete().eq('id', id)
+    if (error) throw error
   },
 
   // Tasks

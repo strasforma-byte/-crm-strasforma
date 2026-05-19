@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useApp } from "@/context/AppContext";
+import { db } from "@/lib/db";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,7 @@ export default function EditPipelineDialog({ open, onOpenChange, pipeline }) {
   const { state, dispatch } = useApp();
   const [name, setName] = useState("");
   const [columns, setColumns] = useState([]);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (open && pipeline) {
@@ -20,48 +22,103 @@ export default function EditPipelineDialog({ open, onOpenChange, pipeline }) {
     }
   }, [open, pipeline?.id]);
 
-  const handleAddColumn = () => {
-    const newCol = {
-      id: "col-" + Date.now(),
-      name: "Nouvelle étape",
-      order: columns.length,
-      cards: []
-    };
-    setColumns([...columns, newCol]);
+  const handleAddColumn = async () => {
+    if (!pipeline) return;
+    
+    try {
+      const newColData = {
+        pipelineId: pipeline.id,
+        name: "Nouvelle étape",
+        order: columns.length
+      };
+      const savedCol = await db.insertColumn(newColData);
+      setColumns([...columns, { ...savedCol, cards: [] }]);
+      
+      // Update global state too
+      const updatedPipelines = state.pipelines.map(p => {
+        if (p.id === pipeline.id) {
+          return { ...p, columns: [...p.columns, { ...savedCol, cards: [] }] };
+        }
+        return p;
+      });
+      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+    } catch (error) {
+      toast.error("Erreur lors de l'ajout de l'étape");
+    }
   };
 
-  const handleRemoveColumn = (id) => {
+  const handleRemoveColumn = async (id) => {
     const column = columns.find(c => c.id === id);
     if (column && column.cards && column.cards.length > 0) {
       toast.error("Impossible de supprimer une colonne contenant des affaires");
       return;
     }
-    setColumns(columns.filter(c => c.id !== id));
+    
+    try {
+      await db.deleteColumn(id);
+      setColumns(columns.filter(c => c.id !== id));
+      
+      // Update global state
+      const updatedPipelines = state.pipelines.map(p => {
+        if (p.id === pipeline.id) {
+          return { ...p, columns: p.columns.filter(c => c.id !== id) };
+        }
+        return p;
+      });
+      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+    } catch (error) {
+      toast.error("Erreur lors de la suppression de l'étape");
+    }
   };
 
-  const handleUpdateColumnName = (id, newName) => {
+  const handleUpdateColumnName = async (id, newName) => {
+    // Local update for immediate feedback
     setColumns(prev => prev.map(c => c.id === id ? { ...c, name: newName } : c));
+    
+    try {
+      await db.updateColumn(id, { name: newName });
+      
+      // Update global state
+      const updatedPipelines = state.pipelines.map(p => {
+        if (p.id === pipeline.id) {
+          return {
+            ...p,
+            columns: p.columns.map(c => c.id === id ? { ...c, name: newName } : c)
+          };
+        }
+        return p;
+      });
+      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+    } catch (error) {
+      toast.error("Erreur lors de la mise à jour de l'étape");
+    }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!name.trim()) {
       toast.error("Le nom du pipeline est requis");
       return;
     }
 
-    const updatedPipeline = {
-      ...pipeline,
-      name,
-      columns: columns.map((col, index) => ({ ...col, order: index }))
-    };
+    setIsSaving(true);
+    try {
+      const updatedPipeline = await db.updatePipeline(pipeline.id, {
+        name,
+        visibility: pipeline.visibility // Keep existing visibility or add a toggle
+      });
 
-    const updatedPipelines = state.pipelines.map(p => 
-      p.id === pipeline.id ? updatedPipeline : p
-    );
+      const updatedPipelines = state.pipelines.map(p => 
+        p.id === pipeline.id ? { ...p, ...updatedPipeline } : p
+      );
 
-    dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
-    toast.success("Pipeline mis à jour avec succès");
-    onOpenChange(false);
+      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+      toast.success("Pipeline mis à jour avec succès");
+      onOpenChange(false);
+    } catch (error) {
+      toast.error("Erreur lors de la mise à jour du pipeline");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   if (!pipeline) return null;
@@ -122,7 +179,9 @@ export default function EditPipelineDialog({ open, onOpenChange, pipeline }) {
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-          <Button className="bg-green-600 hover:bg-green-700" onClick={handleSave}>Enregistrer les modifications</Button>
+          <Button className="bg-green-600 hover:bg-green-700" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? "Enregistrement..." : "Enregistrer les modifications"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
