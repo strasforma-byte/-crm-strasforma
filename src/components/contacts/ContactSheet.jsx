@@ -18,7 +18,8 @@ import {
   Trash2,
   Tag,
   User,
-  Fingerprint
+  Fingerprint,
+  MapPin
 } from "lucide-react";
 import { 
   Select, 
@@ -37,6 +38,7 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
     lastName: "",
     company: "",
     siret: "",
+    postalCode: "",
     phone: "",
     email: "",
     tags: [],
@@ -52,6 +54,7 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
         lastName: contact.lastName || "",
         company: contact.company || "",
         siret: contact.siret || "",
+        postalCode: contact.postalCode || "",
         phone: contact.phone || "",
         email: contact.email || "",
         tags: Array.isArray(contact.tags) ? contact.tags : [],
@@ -65,6 +68,7 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
         lastName: "",
         company: "",
         siret: "",
+        postalCode: "",
         phone: "",
         email: "",
         tags: ["prospect"],
@@ -183,11 +187,24 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Téléphone</Label>
-                  <Input value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Input className="pl-10" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+                  </div>
                 </div>
                 <div className="space-y-2">
-                  <Label>Email *</Label>
-                  <Input value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+                  <Label>Code Postal</Label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                    <Input className="pl-10" placeholder="75000" value={formData.postalCode} onChange={e => setFormData({...formData, postalCode: e.target.value})} />
+                  </div>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>Email *</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input className="pl-10" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
                 </div>
               </div>
             </div>

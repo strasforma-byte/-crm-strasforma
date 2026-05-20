@@ -384,6 +384,7 @@ export default function ContactsView() {
                   <div className="flex items-center">Entreprise <SortIcon columnKey="company" /></div>
                 </TableHead>
                 <TableHead className="font-bold text-slate-900 text-xs">SIRET</TableHead>
+                <TableHead className="font-bold text-slate-900 text-xs">CP</TableHead>
                 <TableHead onClick={() => handleSort("industry")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
                   <div className="flex items-center">Secteur <SortIcon columnKey="industry" /></div>
                 </TableHead>
@@ -415,6 +416,9 @@ export default function ContactsView() {
                       </TableCell>
                       <TableCell className="text-slate-500 text-[10px] font-mono">
                         {contact.siret || "-"}
+                      </TableCell>
+                      <TableCell className="text-slate-500 text-[10px] font-bold">
+                        {contact.postalCode || "-"}
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="text-[9px] uppercase font-bold bg-slate-50 border-slate-100">
