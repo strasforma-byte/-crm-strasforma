@@ -33,6 +33,8 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [targetListId, setTargetListId] = useState(activeListId || "list-default");
+  const [newListName, setNewListName] = useState("");
+  const [isCreatingNewList, setIsCreatingNewList] = useState(false);
 
   const fileInputRef = useRef(null);
 
@@ -94,9 +96,27 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
       return;
     }
 
+    if (isCreatingNewList && !newListName.trim()) {
+      toast.error("Veuillez saisir un nom pour le nouveau répertoire");
+      return;
+    }
+
     setIsImporting(true);
     setImportProgress(0);
     try {
+      let finalTargetListId = targetListId;
+
+      // Create new list if requested
+      if (isCreatingNewList) {
+        const newList = await db.insertContactList({
+          name: newListName.trim(),
+          color: "#16a34a",
+          icon: "folder"
+        });
+        dispatch({ type: "UPDATE_CONTACT_LISTS", payload: [...state.contactLists, newList] });
+        finalTargetListId = newList.id;
+      }
+
       const rows = fullData.slice(1);
       
       // Get existing SIRETs to avoid duplicates
@@ -130,7 +150,7 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
 
         newContacts.push({
           createdBy: state.currentUser.id,
-          listId: targetListId,
+          listId: finalTargetListId,
           firstName: getVal("firstName"),
           lastName: lastName,
           company: getVal("company"),
@@ -144,13 +164,14 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
           interactions: [],
           lastModified: new Date().toISOString()
         });
-      });
-      
-      if (newContacts.length === 0) {
+        });
+
+        if (newContacts.length === 0) {
         toast.info(`Aucun nouveau contact à importer. (${skippedCount.duplicates} doublons ignorés)`);
         setIsImporting(false);
         return;
-      }
+        }
+
 
       // Chunk imports
       const CHUNK_SIZE = 100;
@@ -188,6 +209,8 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
     setFullData([]);
     setMapping({});
     setTargetListId(activeListId || "list-default");
+    setNewListName("");
+    setIsCreatingNewList(false);
   };
 
   return (
@@ -229,17 +252,40 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
               </div>
 
               <div className="space-y-3">
-                <Label className="text-xs font-black uppercase tracking-widest text-slate-400">Répertoire de destination</Label>
-                <Select value={targetListId} onValueChange={setTargetListId}>
-                  <SelectTrigger className="w-full bg-slate-50 border-slate-100">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {state.contactLists.map(list => (
-                      <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex justify-between items-center">
+                  <Label className="text-xs font-black uppercase tracking-widest text-slate-400">Répertoire de destination</Label>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="h-6 text-[10px] font-bold uppercase text-green-600 hover:text-green-700 hover:bg-green-50 p-0"
+                    onClick={() => setIsCreatingNewList(!isCreatingNewList)}
+                  >
+                    {isCreatingNewList ? "Choisir existant" : "+ Créer nouveau"}
+                  </Button>
+                </div>
+                
+                {isCreatingNewList ? (
+                  <div className="space-y-2">
+                    <Input 
+                      placeholder="Nom du nouveau répertoire..." 
+                      className="bg-slate-50 border-slate-100 h-10"
+                      value={newListName}
+                      onChange={(e) => setNewListName(e.target.value)}
+                    />
+                    <p className="text-[10px] text-slate-400 font-medium italic">Le répertoire sera créé automatiquement au lancement de l'import.</p>
+                  </div>
+                ) : (
+                  <Select value={targetListId} onValueChange={setTargetListId}>
+                    <SelectTrigger className="w-full bg-slate-50 border-slate-100">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {state.contactLists.map(list => (
+                        <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
               </div>
 
               <div className="space-y-3">

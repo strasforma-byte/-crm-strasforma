@@ -76,9 +76,29 @@ export const db = {
 
   // Contacts
   async getContacts() {
-    const { data, error } = await supabase.from('contacts').select('*').limit(5000)
-    if (error) throw error
-    return data.map(mapContact)
+    const { count, error: countError } = await supabase
+      .from('contacts')
+      .select('*', { count: 'exact', head: true });
+    
+    if (countError) throw countError;
+
+    let allData = [];
+    const step = 1000;
+    const total = count || 0;
+
+    for (let from = 0; from < total; from += step) {
+      const to = Math.min(from + step - 1, total - 1);
+      const { data, error } = await supabase
+        .from('contacts')
+        .select('*')
+        .range(from, to)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      allData = [...allData, ...data];
+    }
+
+    return allData.map(mapContact);
   },
 
   async insertContact(contact) {

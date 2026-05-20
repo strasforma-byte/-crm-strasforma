@@ -165,7 +165,7 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Prénom *</Label>
+                  <Label>Prénom</Label>
                   <Input value={formData.firstName} onChange={e => setFormData({...formData, firstName: e.target.value})} />
                 </div>
                 <div className="space-y-2">
@@ -181,7 +181,7 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>SIRET</Label>
+                <Label>SIRET *</Label>
                 <div className="relative">
                   <Fingerprint className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input className="pl-10" placeholder="123 456 789 00012" value={formData.siret} onChange={e => setFormData({...formData, siret: e.target.value})} />
@@ -224,7 +224,7 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Email *</Label>
+                <Label>Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input className="pl-10" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
