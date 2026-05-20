@@ -83,6 +83,12 @@ export const db = {
     return mapContact(data)
   },
 
+  async bulkInsertContacts(contacts) {
+    const { data, error } = await supabase.from('contacts').insert(contacts.map(toDbContact)).select()
+    if (error) throw error
+    return data.map(mapContact)
+  },
+
   async updateContact(id, contact) {
     const { data, error } = await supabase.from('contacts').update(toDbContact(contact)).eq('id', id).select().single()
     if (error) throw error

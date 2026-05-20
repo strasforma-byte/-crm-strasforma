@@ -34,7 +34,8 @@ import {
   Clock,
   ArrowUpDown,
   SortAsc,
-  SortDesc
+  SortDesc,
+  Upload
 } from "lucide-react";
 import { 
   Select, 
@@ -44,6 +45,7 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import ContactSheet from "./ContactSheet";
+import ImportContactsDialog from "./ImportContactsDialog";
 import NewCardDialog from "../pipeline/NewCardDialog";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -88,6 +90,7 @@ export default function ContactsView() {
   // Editing & UI State
   const [selectedContact, setSelectedContact] = useState(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   const [isNewCardOpen, setIsNewCardOpen] = useState(false);
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [tempComment, setTempComment] = useState("");
@@ -304,9 +307,14 @@ export default function ContactsView() {
             </div>
             <p className="text-slate-500 text-sm font-medium">{listContacts.length} contacts affichés</p>
           </div>
-          <Button onClick={() => { setSelectedContact(null); setIsSheetOpen(true); }} className="bg-green-600 hover:bg-green-700 shadow-lg shadow-green-100 px-6 text-white">
-            <Plus className="w-4 h-4 mr-2" /> Nouveau Contact
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button variant="outline" onClick={() => setIsImportOpen(true)} className="border-slate-200 text-slate-600 hover:bg-slate-50">
+              <Upload className="w-4 h-4 mr-2" /> Importer
+            </Button>
+            <Button onClick={() => { setSelectedContact(null); setIsSheetOpen(true); }} className="bg-green-600 hover:bg-green-700 shadow-lg shadow-green-100 px-6 text-white">
+              <Plus className="w-4 h-4 mr-2" /> Nouveau Contact
+            </Button>
+          </div>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border shadow-sm space-y-4">
@@ -554,6 +562,12 @@ export default function ContactsView() {
         contact={selectedContact} 
         open={isSheetOpen} 
         onOpenChange={setIsSheetOpen} 
+        activeListId={activeListId}
+      />
+
+      <ImportContactsDialog 
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
         activeListId={activeListId}
       />
 
