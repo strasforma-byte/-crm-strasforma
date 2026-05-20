@@ -82,8 +82,9 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
   }, [contact, open]);
 
   const handleSave = async () => {
-    if (!formData.firstName || !formData.lastName || !formData.email) {
-      toast.error("Veuillez remplir les champs obligatoires (*)");
+    // Looser validation: at least a name or company
+    if (!formData.firstName && !formData.lastName && !formData.company) {
+      toast.error("Veuillez remplir au moins le Prénom, le Nom ou l'Entreprise");
       return;
     }
 
@@ -183,11 +184,12 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
                 </div>
                 <div className="space-y-2">
                   <Label>Agent</Label>
-                  <Select value={formData.assignedAgentId} onValueChange={val => setFormData({...formData, assignedAgentId: val})}>
+                  <Select value={formData.assignedAgentId || "none"} onValueChange={val => setFormData({...formData, assignedAgentId: val === "none" ? "" : val})}>
                     <SelectTrigger>
                       <SelectValue placeholder="Agent..." />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="none">--- Libre ---</SelectItem>
                       {users.map(u => (
                         <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                       ))}

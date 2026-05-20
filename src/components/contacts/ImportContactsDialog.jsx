@@ -31,6 +31,7 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
   const [fullData, setFullData] = useState([]);
   const [mapping, setMapping] = useState({});
   const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
   const [targetListId, setTargetListId] = useState(activeListId || "list-default");
 
   const fileInputRef = useRef(null);
@@ -87,51 +88,62 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
   };
 
   const handleImport = async () => {
-    if (!mapping.firstName || !mapping.lastName || !mapping.email) {
-      toast.error("Veuillez mapper au moins le Prénom, le Nom et l'Email");
+    // Require at least one identifying field
+    if (!mapping.firstName && !mapping.lastName && !mapping.company) {
+      toast.error("Veuillez mapper au moins le Prénom, le Nom ou l'Entreprise");
       return;
     }
 
     setIsImporting(true);
+    setImportProgress(0);
     try {
       const rows = fullData.slice(1);
       
       const newContacts = rows.map((row) => {
+        const getVal = (fieldId) => {
+          const idx = parseInt(mapping[fieldId]);
+          if (isNaN(idx)) return "";
+          const val = row[idx];
+          return val !== null && val !== undefined ? val.toString().trim() : "";
+        };
+
         return {
           createdBy: state.currentUser.id,
           listId: targetListId,
-          firstName: row[parseInt(mapping.firstName)]?.toString() || "",
-          lastName: row[parseInt(mapping.lastName)] || "",
-          company: row[parseInt(mapping.company)] || "",
-          siret: row[parseInt(mapping.siret)] || "",
-          postalCode: row[parseInt(mapping.postalCode)] || "",
-          email: row[parseInt(mapping.email)] || "",
-          phone: row[parseInt(mapping.phone)] || "",
-          industry: row[parseInt(mapping.industry)] || "",
-          notes: row[parseInt(mapping.notes)] || "Importé le " + new Date().toLocaleDateString(),
+          firstName: getVal("firstName"),
+          lastName: getVal("lastName"),
+          company: getVal("company"),
+          siret: getVal("siret"),
+          postalCode: getVal("postalCode"),
+          email: getVal("email"),
+          phone: getVal("phone"),
+          industry: getVal("industry"),
+          notes: getVal("notes") || "Importé le " + new Date().toLocaleDateString(),
           tags: ["prospect"],
           interactions: [],
           lastModified: new Date().toISOString()
         };
       });
 
-      // Simple email validation filter
-      const validContacts = newContacts.filter(c => c.email && c.email.toString().includes("@"));
+      // Looser validation: at least a name or company
+      const validContacts = newContacts.filter(c => c.firstName || c.lastName || c.company);
       
       if (validContacts.length === 0) {
-        toast.error("Aucun contact valide trouvé (Vérifiez la colonne Email)");
+        toast.error("Aucun contact valide trouvé (Vérifiez les colonnes Nom ou Entreprise)");
         setIsImporting(false);
         return;
       }
 
-      // Chunk imports (max 100 at a time to avoid issues)
+      // Chunk imports
       const CHUNK_SIZE = 100;
       let allSavedContacts = [];
+      const totalChunks = Math.ceil(validContacts.length / CHUNK_SIZE);
       
       for (let i = 0; i < validContacts.length; i += CHUNK_SIZE) {
         const chunk = validContacts.slice(i, i + CHUNK_SIZE);
         const savedChunk = await db.bulkInsertContacts(chunk);
         allSavedContacts = [...allSavedContacts, ...savedChunk];
+        setImportProgress(Math.round(((i / CHUNK_SIZE) + 1) / totalChunks * 100));
       }
       
       dispatch({ 
@@ -147,6 +159,7 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
       toast.error(`Erreur lors de l'importation : ${error.message || "Vérifiez le format des données."}`);
     } finally {
       setIsImporting(false);
+      setImportProgress(0);
     }
   };
 
@@ -264,7 +277,18 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
         </div>
 
         <DialogFooter className="pt-6 border-t mt-auto">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
+          {isImporting && (
+            <div className="flex-1 mr-4">
+              <div className="flex justify-between text-[10px] font-black uppercase mb-1">
+                <span className="text-slate-400">Progression</span>
+                <span className="text-green-600">{importProgress}%</span>
+              </div>
+              <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+                <div className="h-full bg-green-600 transition-all duration-300" style={{ width: `${importProgress}%` }} />
+              </div>
+            </div>
+          )}
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isImporting}>Annuler</Button>
           {step === 2 && (
             <Button className="bg-green-600 hover:bg-green-700 px-8" onClick={handleImport} disabled={isImporting}>
               {isImporting ? (
