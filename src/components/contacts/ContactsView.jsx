@@ -222,9 +222,9 @@ export default function ContactsView() {
     const idsToDelete = [];
     Object.values(groupedBySiret).forEach(group => {
       if (group.length > 1) {
-        // Sort by last modified date, newest first
-        const sorted = group.sort((a, b) => new Date(b.lastModified || b.createdAt) - new Date(a.lastModified || a.createdAt));
-        // Keep the first (newest), delete the rest
+        // Sort by creation date, oldest first
+        const sorted = group.sort((a, b) => new Date(a.createdAt || a.lastModified) - new Date(b.createdAt || b.lastModified));
+        // Keep the first (oldest), delete the rest
         const duplicates = sorted.slice(1);
         duplicates.forEach(d => idsToDelete.push(d.id));
       }
@@ -235,7 +235,7 @@ export default function ContactsView() {
       return;
     }
 
-    if (!confirm(`Le système a détecté ${idsToDelete.length} doublons. Voulez-vous les supprimer ? Seule la version la plus récente de chaque contact sera conservée.`)) {
+    if (!confirm(`Le système a détecté ${idsToDelete.length} doublons. Voulez-vous les supprimer ? La version la plus ANCIENNE de chaque contact sera conservée.`)) {
       return;
     }
 
