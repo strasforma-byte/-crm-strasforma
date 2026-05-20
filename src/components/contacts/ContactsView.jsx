@@ -247,7 +247,7 @@ export default function ContactsView() {
       toast.success(`${idsToDelete.length} doublons supprimés avec succès`);
     } catch (error) {
       console.error("Cleanup error:", error);
-      toast.error("Erreur lors du nettoyage des doublons");
+      toast.error(`Erreur lors du nettoyage : ${error.message || "Problème de connexion"}`);
     } finally {
       setIsCleaning(false);
     }

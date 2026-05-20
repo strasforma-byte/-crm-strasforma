@@ -125,8 +125,12 @@ export const db = {
   },
 
   async bulkDeleteContacts(ids) {
-    const { error } = await supabase.from('contacts').delete().in('id', ids)
-    if (error) throw error
+    const CHUNK_SIZE = 100;
+    for (let i = 0; i < ids.length; i += CHUNK_SIZE) {
+      const chunk = ids.slice(i, i + CHUNK_SIZE);
+      const { error } = await supabase.from('contacts').delete().in('id', chunk);
+      if (error) throw error;
+    }
   },
 
   // Contact Lists
