@@ -17,7 +17,8 @@ import {
   Plus, 
   Trash2,
   Tag,
-  User
+  User,
+  Fingerprint
 } from "lucide-react";
 import { 
   Select, 
@@ -35,6 +36,7 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
     firstName: "",
     lastName: "",
     company: "",
+    siret: "",
     phone: "",
     email: "",
     tags: [],
@@ -49,6 +51,7 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
         firstName: contact.firstName || "",
         lastName: contact.lastName || "",
         company: contact.company || "",
+        siret: contact.siret || "",
         phone: contact.phone || "",
         email: contact.email || "",
         tags: Array.isArray(contact.tags) ? contact.tags : [],
@@ -61,6 +64,7 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
         firstName: "",
         lastName: "",
         company: "",
+        siret: "",
         phone: "",
         email: "",
         tags: ["prospect"],
@@ -148,6 +152,13 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
                 <div className="relative">
                   <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input className="pl-10" value={formData.company} onChange={e => setFormData({...formData, company: e.target.value})} />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label>SIRET</Label>
+                <div className="relative">
+                  <Fingerprint className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <Input className="pl-10" placeholder="123 456 789 00012" value={formData.siret} onChange={e => setFormData({...formData, siret: e.target.value})} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
