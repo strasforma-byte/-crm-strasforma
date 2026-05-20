@@ -82,9 +82,9 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
   }, [contact, open]);
 
   const handleSave = async () => {
-    // Looser validation: at least a name or company
-    if (!formData.firstName && !formData.lastName && !formData.company) {
-      toast.error("Veuillez remplir au moins le Prénom, le Nom ou l'Entreprise");
+    // Nom and SIRET are now mandatory
+    if (!formData.lastName || !formData.siret) {
+      toast.error("Le Nom et le SIRET sont obligatoires");
       return;
     }
 
@@ -93,7 +93,16 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
       const contacts = Array.isArray(state.contacts) ? state.contacts : [];
 
       if (contact) {
-        const savedContact = await db.updateContact(contact.id, formData);
+        // Prepare updated object
+        const updatedData = {
+          ...contact,
+          ...formData,
+          // Ensure nulls for database if empty
+          assignedAgentId: formData.assignedAgentId || null
+        };
+
+        const savedContact = await db.updateContact(contact.id, updatedData);
+        
         const updated = contacts.map(c => 
           c.id === contact.id ? savedContact : c
         );
@@ -104,6 +113,7 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
           createdBy: state.currentUser?.id,
           listId: activeListId || "list-default",
           ...formData,
+          assignedAgentId: formData.assignedAgentId || null,
           interactions: [],
           createdAt: new Date().toISOString()
         };
@@ -114,7 +124,7 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
       onOpenChange(false);
     } catch (error) {
       console.error("Error saving contact:", error);
-      toast.error("Erreur lors de la sauvegarde du contact");
+      toast.error(`Erreur : ${error.message || "Problème lors de la sauvegarde"}`);
     } finally {
       setIsSaving(false);
     }

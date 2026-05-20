@@ -76,7 +76,7 @@ export const db = {
 
   // Contacts
   async getContacts() {
-    const { data, error } = await supabase.from('contacts').select('*')
+    const { data, error } = await supabase.from('contacts').select('*').limit(5000)
     if (error) throw error
     return data.map(mapContact)
   },

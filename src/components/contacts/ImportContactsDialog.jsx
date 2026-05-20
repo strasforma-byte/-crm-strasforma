@@ -88,9 +88,9 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
   };
 
   const handleImport = async () => {
-    // Require at least one identifying field
-    if (!mapping.firstName && !mapping.lastName && !mapping.company) {
-      toast.error("Veuillez mapper au moins le Prénom, le Nom ou l'Entreprise");
+    // Require Nom and SIRET
+    if (!mapping.lastName || !mapping.siret) {
+      toast.error("Le Nom et le SIRET sont obligatoires pour l'importation");
       return;
     }
 
@@ -99,7 +99,13 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
     try {
       const rows = fullData.slice(1);
       
-      const newContacts = rows.map((row) => {
+      // Get existing SIRETs to avoid duplicates
+      const existingSirets = new Set(state.contacts.map(c => c.siret).filter(Boolean));
+
+      const newContacts = [];
+      const skippedCount = { duplicates: 0, invalid: 0 };
+
+      rows.forEach((row) => {
         const getVal = (fieldId) => {
           const idx = parseInt(mapping[fieldId]);
           if (isNaN(idx)) return "";
@@ -107,13 +113,28 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
           return val !== null && val !== undefined ? val.toString().trim() : "";
         };
 
-        return {
+        const siret = getVal("siret");
+        const lastName = getVal("lastName");
+
+        // Mandatory check
+        if (!lastName || !siret) {
+          skippedCount.invalid++;
+          return;
+        }
+
+        // Duplicate check
+        if (existingSirets.has(siret)) {
+          skippedCount.duplicates++;
+          return;
+        }
+
+        newContacts.push({
           createdBy: state.currentUser.id,
           listId: targetListId,
           firstName: getVal("firstName"),
-          lastName: getVal("lastName"),
+          lastName: lastName,
           company: getVal("company"),
-          siret: getVal("siret"),
+          siret: siret,
           postalCode: getVal("postalCode"),
           email: getVal("email"),
           phone: getVal("phone"),
@@ -122,14 +143,11 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
           tags: ["prospect"],
           interactions: [],
           lastModified: new Date().toISOString()
-        };
+        });
       });
-
-      // Looser validation: at least a name or company
-      const validContacts = newContacts.filter(c => c.firstName || c.lastName || c.company);
       
-      if (validContacts.length === 0) {
-        toast.error("Aucun contact valide trouvé (Vérifiez les colonnes Nom ou Entreprise)");
+      if (newContacts.length === 0) {
+        toast.info(`Aucun nouveau contact à importer. (${skippedCount.duplicates} doublons ignorés)`);
         setIsImporting(false);
         return;
       }
@@ -137,10 +155,10 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
       // Chunk imports
       const CHUNK_SIZE = 100;
       let allSavedContacts = [];
-      const totalChunks = Math.ceil(validContacts.length / CHUNK_SIZE);
+      const totalChunks = Math.ceil(newContacts.length / CHUNK_SIZE);
       
-      for (let i = 0; i < validContacts.length; i += CHUNK_SIZE) {
-        const chunk = validContacts.slice(i, i + CHUNK_SIZE);
+      for (let i = 0; i < newContacts.length; i += CHUNK_SIZE) {
+        const chunk = newContacts.slice(i, i + CHUNK_SIZE);
         const savedChunk = await db.bulkInsertContacts(chunk);
         allSavedContacts = [...allSavedContacts, ...savedChunk];
         setImportProgress(Math.round(((i / CHUNK_SIZE) + 1) / totalChunks * 100));
@@ -151,7 +169,7 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
         payload: [...state.contacts, ...allSavedContacts] 
       });
       
-      toast.success(`${allSavedContacts.length} contacts importés avec succès`);
+      toast.success(`${allSavedContacts.length} contacts importés. (${skippedCount.duplicates} doublons ignorés)`);
       onOpenChange(false);
       reset();
     } catch (error) {
