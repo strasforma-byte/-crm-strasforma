@@ -43,22 +43,30 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
     const reader = new FileReader();
     reader.onload = (event) => {
       try {
-        const bstr = event.target.result;
-        const wb = XLSX.read(bstr, { type: "binary" });
+        const data = new Uint8Array(event.target.result);
+        const wb = XLSX.read(data, { type: "array" });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
-        const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
+        const jsonData = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
         
-        if (data.length === 0) {
+        if (jsonData.length === 0) {
           toast.error("Le fichier est vide");
           return;
         }
 
-        setFullData(data);
-        setPreview(data.slice(0, 5)); // Header + 4 rows
+        // Clean empty rows at the end
+        const cleanedData = jsonData.filter(row => row.length > 0 && row.some(cell => cell !== null && cell !== undefined && cell !== ""));
+
+        if (cleanedData.length <= 1) { // Only headers or nothing
+          toast.error("Le fichier ne contient pas de données valides (uniquement des lignes vides ou des en-têtes)");
+          return;
+        }
+
+        setFullData(cleanedData);
+        setPreview(cleanedData.slice(0, 5)); // Header + 4 rows
         
         // Auto-mapping attempt
-        const headers = data[0];
+        const headers = cleanedData[0] || [];
         const initialMapping = {};
         CONTACT_FIELDS.forEach(field => {
           const match = headers.findIndex(h => 
@@ -75,7 +83,7 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
         toast.error("Erreur lors de la lecture du fichier");
       }
     };
-    reader.readAsBinaryString(selectedFile);
+    reader.readAsArrayBuffer(selectedFile);
   };
 
   const handleImport = async () => {
@@ -86,14 +94,13 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
 
     setIsImporting(true);
     try {
-      const headers = fullData[0];
       const rows = fullData.slice(1);
       
-      const newContacts = rows.filter(row => row.length > 0).map((row) => {
-        const contact = {
+      const newContacts = rows.map((row) => {
+        return {
           createdBy: state.currentUser.id,
           listId: targetListId,
-          firstName: row[parseInt(mapping.firstName)] || "",
+          firstName: row[parseInt(mapping.firstName)]?.toString() || "",
           lastName: row[parseInt(mapping.lastName)] || "",
           company: row[parseInt(mapping.company)] || "",
           siret: row[parseInt(mapping.siret)] || "",
@@ -106,31 +113,38 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
           interactions: [],
           lastModified: new Date().toISOString()
         };
-        return contact;
       });
 
       // Simple email validation filter
-      const validContacts = newContacts.filter(c => c.email && c.email.includes("@"));
+      const validContacts = newContacts.filter(c => c.email && c.email.toString().includes("@"));
       
       if (validContacts.length === 0) {
-        toast.error("Aucun contact valide trouvé");
+        toast.error("Aucun contact valide trouvé (Vérifiez la colonne Email)");
         setIsImporting(false);
         return;
       }
 
-      const savedContacts = await db.bulkInsertContacts(validContacts);
+      // Chunk imports (max 100 at a time to avoid issues)
+      const CHUNK_SIZE = 100;
+      let allSavedContacts = [];
+      
+      for (let i = 0; i < validContacts.length; i += CHUNK_SIZE) {
+        const chunk = validContacts.slice(i, i + CHUNK_SIZE);
+        const savedChunk = await db.bulkInsertContacts(chunk);
+        allSavedContacts = [...allSavedContacts, ...savedChunk];
+      }
       
       dispatch({ 
         type: "UPDATE_CONTACTS", 
-        payload: [...state.contacts, ...savedContacts] 
+        payload: [...state.contacts, ...allSavedContacts] 
       });
       
-      toast.success(`${savedContacts.length} contacts importés avec succès`);
+      toast.success(`${allSavedContacts.length} contacts importés avec succès`);
       onOpenChange(false);
       reset();
     } catch (error) {
       console.error("Import error:", error);
-      toast.error("Erreur lors de l'importation");
+      toast.error(`Erreur lors de l'importation : ${error.message || "Vérifiez le format des données."}`);
     } finally {
       setIsImporting(false);
     }
