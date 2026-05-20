@@ -32,10 +32,10 @@ const toDbContact = (c) => ({
   industry: c.industry,
   tags: c.tags,
   notes: c.notes,
-  list_id: c.listId,
-  assigned_agent_id: c.assignedAgentId,
-  created_by: c.createdBy,
-  interactions: c.interactions,
+  list_id: (c.listId === 'list-default' || !c.listId) ? null : c.listId,
+  assigned_agent_id: !c.assignedAgentId ? null : c.assignedAgentId,
+  created_by: c.createdBy || null,
+  interactions: c.interactions || [],
   last_modified: new Date().toISOString()
 })
 

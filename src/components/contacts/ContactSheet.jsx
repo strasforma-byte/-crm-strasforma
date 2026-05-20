@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useApp } from "@/context/AppContext";
+import { db } from "@/lib/db";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetFooter } from "@/components/ui/sheet";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -32,6 +33,7 @@ import { toast } from "sonner";
 
 export default function ContactSheet({ contact, open, onOpenChange, activeListId }) {
   const { state, dispatch } = useApp();
+  const [isSaving, setIsSaving] = useState(false);
   
   const [formData, setFormData] = useState({
     firstName: "",
@@ -79,33 +81,42 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
     }
   }, [contact, open]);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!formData.firstName || !formData.lastName || !formData.email) {
       toast.error("Veuillez remplir les champs obligatoires (*)");
       return;
     }
 
-    const contacts = Array.isArray(state.contacts) ? state.contacts : [];
+    setIsSaving(true);
+    try {
+      const contacts = Array.isArray(state.contacts) ? state.contacts : [];
 
-    if (contact) {
-      const updated = contacts.map(c => 
-        c.id === contact.id ? { ...c, ...formData } : c
-      );
-      dispatch({ type: "UPDATE_CONTACTS", payload: updated });
-      toast.success("Contact mis à jour");
-    } else {
-      const newContact = {
-        id: "c" + (contacts.length + 1),
-        createdBy: state.currentUser?.id || "system",
-        listId: activeListId || "list-default",
-        ...formData,
-        interactions: [],
-        createdAt: new Date().toISOString()
-      };
-      dispatch({ type: "UPDATE_CONTACTS", payload: [...contacts, newContact] });
-      toast.success("Contact créé");
+      if (contact) {
+        const savedContact = await db.updateContact(contact.id, formData);
+        const updated = contacts.map(c => 
+          c.id === contact.id ? savedContact : c
+        );
+        dispatch({ type: "UPDATE_CONTACTS", payload: updated });
+        toast.success("Contact mis à jour");
+      } else {
+        const newContactData = {
+          createdBy: state.currentUser?.id,
+          listId: activeListId || "list-default",
+          ...formData,
+          interactions: [],
+          createdAt: new Date().toISOString()
+        };
+        const savedContact = await db.insertContact(newContactData);
+        dispatch({ type: "UPDATE_CONTACTS", payload: [...contacts, savedContact] });
+        toast.success("Contact créé");
+      }
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Error saving contact:", error);
+      toast.error("Erreur lors de la sauvegarde du contact");
+    } finally {
+      setIsSaving(false);
     }
-    onOpenChange(false);
   };
 
   const toggleTag = (tag) => {
@@ -262,8 +273,8 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
 
         <SheetFooter className="p-6 border-t bg-white">
           <Button variant="outline" onClick={() => onOpenChange(false)} className="mr-2">Annuler</Button>
-          <Button className="bg-green-600 hover:bg-green-700" onClick={handleSave}>
-            Sauvegarder
+          <Button className="bg-green-600 hover:bg-green-700" onClick={handleSave} disabled={isSaving}>
+            {isSaving ? "Sauvegarde..." : "Sauvegarder"}
           </Button>
         </SheetFooter>
       </SheetContent>

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from "react";
 import { useApp } from "@/context/AppContext";
 import { usePermissions } from "@/hooks/usePermissions";
+import { db } from "@/lib/db";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
@@ -168,32 +169,41 @@ export default function ContactsView() {
     }));
   };
 
-  const handleCreateList = () => {
+  const handleCreateList = async () => {
     if (!newListName) return;
-    const newList = {
-      id: "list-" + Date.now(),
-      name: newListName,
-      color: "#16a34a",
-      icon: "folder"
-    };
-    dispatch({ type: "UPDATE_CONTACT_LISTS", payload: [...contactLists, newList] });
-    setActiveListId(newList.id);
-    setIsNewPipelineOpen(false);
-    setNewListName("");
-    toast.success("Nouveau répertoire créé");
+    try {
+      const newListData = {
+        name: newListName,
+        color: "#16a34a",
+        icon: "folder"
+      };
+      const savedList = await db.insertContactList(newListData);
+      dispatch({ type: "UPDATE_CONTACT_LISTS", payload: [...contactLists, savedList] });
+      setActiveListId(savedList.id);
+      setIsNewPipelineOpen(false);
+      setNewListName("");
+      toast.success("Nouveau répertoire créé");
+    } catch (error) {
+      toast.error("Erreur lors de la création du répertoire");
+    }
   };
 
-  const handleDeleteList = (listId) => {
+  const handleDeleteList = async (listId) => {
     if (listId === "list-default") {
       toast.error("Impossible de supprimer le répertoire par défaut");
       return;
     }
-    const updatedLists = contactLists.filter(l => l.id !== listId);
-    const updatedContacts = contacts.filter(c => c.listId !== listId);
-    dispatch({ type: "UPDATE_CONTACT_LISTS", payload: updatedLists });
-    dispatch({ type: "UPDATE_CONTACTS", payload: updatedContacts });
-    setActiveListId("list-default");
-    toast.info("Répertoire supprimé avec succès");
+    try {
+      await db.deleteContactList(listId);
+      const updatedLists = contactLists.filter(l => l.id !== listId);
+      const updatedContacts = contacts.filter(c => c.listId !== listId);
+      dispatch({ type: "UPDATE_CONTACT_LISTS", payload: updatedLists });
+      dispatch({ type: "UPDATE_CONTACTS", payload: updatedContacts });
+      setActiveListId("list-default");
+      toast.info("Répertoire supprimé avec succès");
+    } catch (error) {
+      toast.error("Erreur lors de la suppression du répertoire");
+    }
   };
 
   const startEditingComment = (e, contact) => {
@@ -202,12 +212,20 @@ export default function ContactsView() {
     setTempComment(contact.notes || "");
   };
 
-  const saveComment = (contactId) => {
-    const updated = contacts.map(c => 
-      c.id === contactId ? { ...c, notes: tempComment, lastModified: new Date().toISOString() } : c
-    );
-    dispatch({ type: "UPDATE_CONTACTS", payload: updated });
-    setEditingCommentId(null);
+  const saveComment = async (contactId) => {
+    try {
+      const contact = contacts.find(c => c.id === contactId);
+      if (!contact) return;
+      
+      const updatedContact = await db.updateContact(contactId, { ...contact, notes: tempComment });
+      const updated = contacts.map(c => 
+        c.id === contactId ? updatedContact : c
+      );
+      dispatch({ type: "UPDATE_CONTACTS", payload: updated });
+      setEditingCommentId(null);
+    } catch (error) {
+      toast.error("Erreur lors de la sauvegarde du commentaire");
+    }
   };
 
   const handleCreateDealForContact = (e, contact) => {
