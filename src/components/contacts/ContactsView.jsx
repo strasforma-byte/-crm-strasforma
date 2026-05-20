@@ -36,7 +36,9 @@ import {
   ArrowUpDown,
   SortAsc,
   SortDesc,
-  Upload
+  Upload,
+  Sparkles,
+  Loader2
 } from "lucide-react";
 import { 
   Select, 
@@ -83,6 +85,7 @@ export default function ContactsView() {
   
   // Sorting State
   const [sortConfig, setSortConfig] = useState({ key: "lastModified", direction: "desc" });
+  const [isCleaning, setIsCleaning] = useState(false);
   
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -206,6 +209,50 @@ export default function ContactsView() {
     }
   };
 
+  const handleCleanupDuplicates = async () => {
+    const contactsWithSiret = contacts.filter(c => c.siret && c.siret.trim() !== "");
+    const groupedBySiret = {};
+    
+    contactsWithSiret.forEach(c => {
+      const s = c.siret.trim();
+      if (!groupedBySiret[s]) groupedBySiret[s] = [];
+      groupedBySiret[s].push(c);
+    });
+
+    const idsToDelete = [];
+    Object.values(groupedBySiret).forEach(group => {
+      if (group.length > 1) {
+        // Sort by last modified date, newest first
+        const sorted = group.sort((a, b) => new Date(b.lastModified || b.createdAt) - new Date(a.lastModified || a.createdAt));
+        // Keep the first (newest), delete the rest
+        const duplicates = sorted.slice(1);
+        duplicates.forEach(d => idsToDelete.push(d.id));
+      }
+    });
+
+    if (idsToDelete.length === 0) {
+      toast.info("Aucun doublon détecté (basé sur le SIRET)");
+      return;
+    }
+
+    if (!confirm(`Le système a détecté ${idsToDelete.length} doublons. Voulez-vous les supprimer ? Seule la version la plus récente de chaque contact sera conservée.`)) {
+      return;
+    }
+
+    setIsCleaning(true);
+    try {
+      await db.bulkDeleteContacts(idsToDelete);
+      const updatedContacts = contacts.filter(c => !idsToDelete.includes(c.id));
+      dispatch({ type: "UPDATE_CONTACTS", payload: updatedContacts });
+      toast.success(`${idsToDelete.length} doublons supprimés avec succès`);
+    } catch (error) {
+      console.error("Cleanup error:", error);
+      toast.error("Erreur lors du nettoyage des doublons");
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
   const startEditingComment = (e, contact) => {
     e.stopPropagation();
     setEditingCommentId(contact.id);
@@ -326,6 +373,17 @@ export default function ContactsView() {
             <p className="text-slate-500 text-sm font-medium">{listContacts.length} contacts affichés</p>
           </div>
           <div className="flex items-center gap-3">
+            {isAdmin && (
+              <Button 
+                variant="outline" 
+                onClick={handleCleanupDuplicates} 
+                disabled={isCleaning}
+                className="border-amber-200 text-amber-700 hover:bg-amber-50"
+              >
+                {isCleaning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                Nettoyer les doublons
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setIsImportOpen(true)} className="border-slate-200 text-slate-600 hover:bg-slate-50">
               <Upload className="w-4 h-4 mr-2" /> Importer
             </Button>
