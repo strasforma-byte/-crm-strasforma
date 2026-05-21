@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
@@ -10,7 +10,28 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Switch } from "@/components/ui/switch";
-import { CheckSquare, Calendar as CalendarIcon, Building2, User as UserIcon, Euro } from "lucide-react";
+import { 
+  CheckSquare, 
+  Calendar as CalendarIcon, 
+  Building2, 
+  User as UserIcon, 
+  Euro, 
+  Search, 
+  Check, 
+  ChevronsUpDown,
+  Fingerprint
+} from "lucide-react";
+import { 
+  Command, 
+  CommandEmpty, 
+  CommandGroup, 
+  CommandInput, 
+  CommandItem,
+  CommandList 
+} from "@/components/ui/command";
+import { cn } from "@/lib/utils";
+import { toast } from "sonner";
+import { db } from "@/lib/db";
 
 export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, defaultContactId }) {
   const { state, dispatch } = useApp();
@@ -34,18 +55,19 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
   });
 
   const [isQuickContactOpen, setIsQuickContactOpen] = useState(false);
-  const [quickContact, setQuickContact] = useState({ firstName: "", lastName: "", company: "", email: "" });
+  const [quickContact, setQuickContact] = useState({ firstName: "", lastName: "", company: "", email: "", phone: "", siret: "" });
+  const [isClientSearchOpen, setIsClientSearchOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
-      const pipeId = defaultPipelineId || state.pipelines[0]?.id;
-      const pipeline = state.pipelines.find(p => p.id === pipeId);
+      const pipeId = defaultPipelineId || (state.pipelines && state.pipelines[0]?.id) || "";
+      const pipeline = state.pipelines?.find(p => p.id === pipeId);
       setFormData({
         title: "",
-        clientId: defaultContactId || state.contacts[0]?.id || "",
+        clientId: defaultContactId || "",
         value: "",
         pipelineId: pipeId,
-        columnId: pipeline?.columns[0]?.id || "",
+        columnId: (pipeline && pipeline.columns && pipeline.columns[0]?.id) || "",
         responsibleId: state.currentUser?.id || ""
       });
       setCreateTask(false);
@@ -57,28 +79,38 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
         duration: "30"
       });
     }
-  }, [open, defaultPipelineId, defaultContactId, state.pipelines, state.contacts, state.currentUser]);
+  }, [open, defaultPipelineId, defaultContactId, state.pipelines, state.currentUser]);
 
-  const handleQuickContactCreate = () => {
-    if (!quickContact.firstName || !quickContact.lastName || !quickContact.email) {
-      toast.error("Veuillez remplir les champs du contact");
+  const handleQuickContactCreate = async () => {
+    if (!quickContact.lastName || !quickContact.company || !quickContact.siret) {
+      toast.error("Le Nom, la Société et le SIRET sont obligatoires");
       return;
     }
-    const newContact = {
-      id: "c" + (state.contacts.length + 1),
-      createdBy: state.currentUser.id,
-      listId: "list-default",
-      ...quickContact,
-      phone: "",
-      tags: ["prospect"],
-      interactions: [],
-      createdAt: new Date().toISOString()
-    };
-    dispatch({ type: "UPDATE_CONTACTS", payload: [...state.contacts, newContact] });
-    setFormData({ ...formData, clientId: newContact.id });
-    setIsQuickContactOpen(false);
-    setQuickContact({ firstName: "", lastName: "", company: "", email: "" });
-    toast.success("Contact créé et sélectionné");
+    
+    try {
+      const newContactData = {
+        createdBy: state.currentUser.id,
+        listId: "list-default",
+        firstName: quickContact.firstName,
+        lastName: quickContact.lastName,
+        company: quickContact.company,
+        email: quickContact.email,
+        phone: quickContact.phone,
+        siret: quickContact.siret,
+        tags: ["prospect"],
+        interactions: [],
+        createdAt: new Date().toISOString()
+      };
+      
+      const savedContact = await db.insertContact(newContactData);
+      dispatch({ type: "UPDATE_CONTACTS", payload: [...state.contacts, savedContact] });
+      setFormData({ ...formData, clientId: savedContact.id });
+      setIsQuickContactOpen(false);
+      setQuickContact({ firstName: "", lastName: "", company: "", email: "", phone: "", siret: "" });
+      toast.success("Contact créé et sélectionné");
+    } catch (error) {
+      toast.error("Erreur lors de la création du contact");
+    }
   };
 
   const handlePipelineChange = (pipeId) => {
@@ -86,11 +118,11 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
     setFormData({
       ...formData,
       pipelineId: pipeId,
-      columnId: pipeline?.columns[0]?.id || ""
+      columnId: (pipeline && pipeline.columns && pipeline.columns[0]?.id) || ""
     });
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
     if (!formData.title || !formData.clientId || !formData.pipelineId || !formData.columnId) {
       toast.error("Veuillez remplir tous les champs obligatoires");
       return;
@@ -101,66 +133,73 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
       return;
     }
 
-    const cardId = "card-" + Date.now();
-    const newCard = {
-      id: cardId,
-      title: formData.title,
-      clientId: formData.clientId,
-      value: parseInt(formData.value) || 0,
-      responsibleId: formData.responsibleId,
-      pipelineId: formData.pipelineId,
-      columnId: formData.columnId,
-      notes: "",
-      history: [{ date: new Date().toISOString(), userId: state.currentUser.id, action: "Affaire créée" }],
-      taskIds: []
-    };
-
-    let actionDateForCard = null;
-
-    if (createTask) {
-      const taskDate = new Date(taskData.date);
-      const [h, m] = taskData.time.split(":").map(Number);
-      taskDate.setHours(h, m);
-      actionDateForCard = taskDate;
-
-      const newTask = {
-        id: "t" + Date.now(),
-        userId: formData.responsibleId,
-        title: taskData.title,
-        type: taskData.type,
-        date: format(taskDate, "yyyy-MM-dd"),
-        time: taskData.time,
-        duration: parseInt(taskData.duration) || 30,
-        linkedContactId: formData.clientId,
-        linkedCardId: cardId,
-        status: "pending",
-        notes: ""
+    try {
+      const newCardData = {
+        columnId: formData.columnId,
+        contactId: formData.clientId,
+        title: formData.title,
+        value: parseFloat(formData.value) || 0,
+        priority: "medium",
+        tags: [],
+        order: 0 
       };
-      dispatch({ type: "UPDATE_TASKS", payload: [...state.tasks, newTask] });
-    }
 
-    newCard.nextAction = createTask ? taskData.title : "";
-    newCard.nextActionDate = actionDateForCard ? actionDateForCard.toISOString() : null;
+      const savedCard = await db.insertCard(newCardData);
+      
+      const updatedPipelines = state.pipelines.map(p => {
+        if (p.id === formData.pipelineId) {
+          return {
+            ...p,
+            columns: p.columns.map(col => {
+              if (col.id === formData.columnId) {
+                const updatedCol = { ...col, cards: [...(col.cards || []), {
+                  id: savedCard.id,
+                  title: savedCard.title,
+                  value: savedCard.value,
+                  priority: savedCard.priority,
+                  tags: savedCard.tags || [],
+                  order: savedCard.order,
+                  contactId: savedCard.contact_id
+                }] };
+                return updatedCol;
+              }
+              return col;
+            })
+          };
+        }
+        return p;
+      });
 
-    const updatedPipelines = state.pipelines.map(p => {
-      if (p.id === formData.pipelineId) {
-        return {
-          ...p,
-          columns: p.columns.map(col => {
-            if (col.id === formData.columnId) {
-              return { ...col, cards: [newCard, ...col.cards] };
-            }
-            return col;
-          })
+      if (createTask) {
+        const taskDate = new Date(taskData.date);
+        const [h, m] = taskData.time.split(":").map(Number);
+        taskDate.setHours(h, m);
+
+        const newTaskData = {
+          title: taskData.title,
+          description: `Tâche liée à l'affaire: ${formData.title}`,
+          dueDate: taskDate.toISOString(),
+          status: "pending",
+          assignedTo: formData.responsibleId,
+          contactId: formData.clientId
         };
+        const savedTask = await db.insertTask(newTaskData);
+        dispatch({ type: "UPDATE_TASKS", payload: [...state.tasks, savedTask] });
       }
-      return p;
-    });
 
-    dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
-    toast.success("Affaire créée avec succès");
-    onOpenChange(false);
+      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+      toast.success("Affaire créée avec succès");
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Error creating deal:", error);
+      toast.error("Erreur lors de la création de l'affaire");
+    }
   };
+
+  const selectedContact = useMemo(() => 
+    state.contacts.find(c => c.id === formData.clientId),
+    [state.contacts, formData.clientId]
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -186,19 +225,57 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
                 + Nouveau contact
               </Button>
             </Label>
-            <Select value={formData.clientId} onValueChange={val => setFormData({...formData, clientId: val})}>
-              <SelectTrigger>
-                <div className="flex items-center gap-2 overflow-hidden">
-                  <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
-                  <SelectValue />
-                </div>
-              </SelectTrigger>
-              <SelectContent>
-                {state.contacts.map(c => (
-                  <SelectItem key={c.id} value={c.id}>{c.firstName} {c.lastName} ({c.company})</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Popover open={isClientSearchOpen} onOpenChange={setIsClientSearchOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={isClientSearchOpen}
+                  className="w-full justify-between font-normal"
+                >
+                  <div className="flex items-center gap-2 overflow-hidden">
+                    <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
+                    <span className="truncate">
+                      {selectedContact 
+                        ? `${selectedContact.firstName} ${selectedContact.lastName} (${selectedContact.company})`
+                        : "Rechercher un client..."}
+                    </span>
+                  </div>
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
+                <Command>
+                  <CommandInput placeholder="Tapez le nom ou la société..." />
+                  <CommandList>
+                    <CommandEmpty>Aucun client trouvé.</CommandEmpty>
+                    <CommandGroup>
+                      {state.contacts.map((c) => (
+                        <CommandItem
+                          key={c.id}
+                          value={`${c.firstName} ${c.lastName} ${c.company}`}
+                          onSelect={() => {
+                            setFormData({ ...formData, clientId: c.id });
+                            setIsClientSearchOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              formData.clientId === c.id ? "opacity-100" : "opacity-0"
+                            )}
+                          />
+                          <div className="flex flex-col">
+                            <span className="font-bold">{c.firstName} {c.lastName}</span>
+                            <span className="text-[10px] text-slate-500 uppercase">{c.company}</span>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           <div className="space-y-2">
@@ -356,7 +433,6 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
         </DialogFooter>
       </DialogContent>
 
-      {/* Quick Contact Dialog */}
       <Dialog open={isQuickContactOpen} onOpenChange={setIsQuickContactOpen}>
         <DialogContent className="sm:max-w-[400px]">
           <DialogHeader>
@@ -369,17 +445,31 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
                 <Input value={quickContact.firstName} onChange={e => setQuickContact({...quickContact, firstName: e.target.value})} />
               </div>
               <div className="space-y-2">
-                <Label>Nom</Label>
+                <Label>Nom *</Label>
                 <Input value={quickContact.lastName} onChange={e => setQuickContact({...quickContact, lastName: e.target.value})} />
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Entreprise</Label>
-              <Input value={quickContact.company} onChange={e => setQuickContact({...quickContact, company: e.target.value})} />
+              <Label>Entreprise *</Label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input className="pl-10" value={quickContact.company} onChange={e => setQuickContact({...quickContact, company: e.target.value})} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>SIRET *</Label>
+              <div className="relative">
+                <Fingerprint className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input className="pl-10" value={quickContact.siret} onChange={e => setQuickContact({...quickContact, siret: e.target.value})} />
+              </div>
             </div>
             <div className="space-y-2">
               <Label>Email</Label>
               <Input type="email" value={quickContact.email} onChange={e => setQuickContact({...quickContact, email: e.target.value})} />
+            </div>
+            <div className="space-y-2">
+              <Label>Téléphone</Label>
+              <Input value={quickContact.phone} onChange={e => setQuickContact({...quickContact, phone: e.target.value})} />
             </div>
           </div>
           <DialogFooter>

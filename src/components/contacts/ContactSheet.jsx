@@ -82,9 +82,9 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
   }, [contact, open]);
 
   const handleSave = async () => {
-    // Nom and SIRET are now mandatory
-    if (!formData.lastName || !formData.siret) {
-      toast.error("Le Nom et le SIRET sont obligatoires");
+    // Nom, Société and SIRET are now mandatory
+    if (!formData.lastName || !formData.company || !formData.siret) {
+      toast.error("Le Nom, la Société et le SIRET sont obligatoires");
       return;
     }
 
@@ -174,7 +174,7 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Entreprise</Label>
+                <Label>Entreprise *</Label>
                 <div className="relative">
                   <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                   <Input className="pl-10" value={formData.company} onChange={e => setFormData({...formData, company: e.target.value})} />
