@@ -38,7 +38,8 @@ import {
   SortDesc,
   Upload,
   Sparkles,
-  Loader2
+  Loader2,
+  GripVertical
 } from "lucide-react";
 import { 
   Select, 
@@ -68,6 +69,139 @@ import {
   AlertDialogTrigger 
 } from "@/components/ui/alert-dialog";
 
+import { 
+  DndContext, 
+  useDraggable, 
+  useDroppable, 
+  PointerSensor, 
+  useSensor, 
+  useSensors,
+  DragOverlay,
+  defaultDropAnimationSideEffects
+} from "@dnd-kit/core";
+
+// --- Sub-components for DnD ---
+
+function DroppableFolder({ list, activeListId, onClick, onDelete, isAdmin, contactsCount }) {
+  const { isOver, setNodeRef } = useDroppable({
+    id: list.id,
+  });
+
+  const isActive = activeListId === list.id;
+
+  return (
+    <div 
+      ref={setNodeRef}
+      onClick={() => onClick(list.id)}
+      className={`group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all ${
+        isActive 
+          ? 'bg-green-600 text-white shadow-md shadow-green-100' 
+          : isOver 
+            ? 'bg-green-50 text-green-700 ring-2 ring-green-400 ring-inset' 
+            : 'hover:bg-slate-50 text-slate-600'
+      }`}
+    >
+      <div className="flex items-center gap-3 overflow-hidden">
+        <Folder className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : (isOver ? 'text-green-600' : 'text-slate-400')}`} />
+        <span className="text-sm font-bold truncate">{list.name}</span>
+      </div>
+      
+      <div className="flex items-center gap-2">
+        {isAdmin && activeListId !== list.id && list.id !== "list-default" && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button 
+                className="p-1 hover:bg-red-500/20 rounded transition-colors"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Trash2 className="w-3.5 h-3.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Supprimer le répertoire ?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Voulez-vous vraiment supprimer <strong>{list.name}</strong> ?<br />
+                  Cela supprimera également les <strong>{contactsCount} contacts</strong> associés.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Annuler</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={() => onDelete(list.id)}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  Confirmer la suppression
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function DroppableAllContacts({ activeListId, onClick }) {
+  const { isOver, setNodeRef } = useDroppable({
+    id: "list-default",
+  });
+
+  const isActive = activeListId === "list-default";
+
+  return (
+    <div 
+      ref={setNodeRef}
+      onClick={() => onClick("list-default")}
+      className={`group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all ${
+        isActive 
+          ? 'bg-green-600 text-white shadow-md shadow-green-100' 
+          : isOver 
+            ? 'bg-green-50 text-green-700 ring-2 ring-green-400 ring-inset' 
+            : 'hover:bg-slate-50 text-slate-600'
+      }`}
+    >
+      <div className="flex items-center gap-3 overflow-hidden">
+        <Users className={`w-4 h-4 shrink-0 ${isActive ? 'text-white' : (isOver ? 'text-green-600' : 'text-slate-400')}`} />
+        <span className="text-sm font-bold truncate">Tous les contacts</span>
+      </div>
+    </div>
+  );
+}
+
+function DraggableContactRow({ contact, children, onSelect, isSelected }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: contact.id,
+    data: contact
+  });
+
+  const style = transform ? {
+    transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+    zIndex: isDragging ? 50 : undefined,
+  } : undefined;
+
+  return (
+    <TableRow 
+      ref={setNodeRef} 
+      style={style}
+      className={`cursor-pointer group transition-colors ${isDragging ? "opacity-50 bg-slate-100 ring-2 ring-green-500 ring-inset" : "hover:bg-slate-50/30"}`}
+      onClick={onSelect}
+    >
+      <TableCell className="w-10 px-0 pl-3" onClick={e => e.stopPropagation()}>
+        <div {...attributes} {...listeners} className="p-2 cursor-grab active:cursor-grabbing hover:bg-slate-100 rounded-md transition-colors">
+          <GripVertical className="w-4 h-4 text-slate-300 group-hover:text-slate-500" />
+        </div>
+      </TableCell>
+      {children}
+    </TableRow>
+  );
+}
+
+const SortIcon = ({ columnKey, sortConfig }) => {
+  if (sortConfig.key !== columnKey) return <ArrowUpDown className="ml-1 w-3 h-3 text-slate-300" />;
+  return sortConfig.direction === "asc" ? <SortAsc className="ml-1 w-3 h-3 text-green-600" /> : <SortDesc className="ml-1 w-3 h-3 text-green-600" />;
+};
+
 export default function ContactsView() {
   const { state, dispatch } = useApp();
   const { canDeleteContact, isAdmin } = usePermissions();
@@ -93,6 +227,7 @@ export default function ContactsView() {
   
   // Editing & UI State
   const [selectedContact, setSelectedContact] = useState(null);
+  const [activeDraggingContact, setActiveDraggingContact] = useState(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isNewCardOpen, setIsNewCardOpen] = useState(false);
@@ -101,6 +236,15 @@ export default function ContactsView() {
 
   const contacts = Array.isArray(state?.contacts) ? state.contacts : [];
   const contactLists = Array.isArray(state?.contactLists) ? state.contactLists : [];
+
+  // DnD Sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 5,
+      },
+    })
+  );
 
   // Reset page when list or filters change
   useEffect(() => {
@@ -209,6 +353,43 @@ export default function ContactsView() {
     }
   };
 
+  const handleDragStart = (event) => {
+    setActiveDraggingContact(event.active.data.current);
+  };
+
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    setActiveDraggingContact(null);
+
+    if (!over) return;
+
+    const contactId = active.id;
+    const targetListId = over.id;
+    const contact = active.data.current;
+
+    if (!contact || contact.listId === targetListId) return;
+
+    try {
+      // If target is list-default, we set listId to null (unclassified)
+      const newListId = targetListId === "list-default" ? null : targetListId;
+      
+      const updatedContact = await db.updateContact(contactId, { ...contact, listId: newListId });
+      dispatch({ 
+        type: "UPDATE_CONTACTS", 
+        payload: contacts.map(c => c.id === contactId ? updatedContact : c) 
+      });
+      
+      if (targetListId === "list-default") {
+        toast.success("Contact retiré du répertoire");
+      } else {
+        const listName = contactLists.find(l => l.id === targetListId)?.name;
+        toast.success(`Contact déplacé vers ${listName}`);
+      }
+    } catch (error) {
+      toast.error("Erreur lors du déplacement");
+    }
+  };
+
   const handleCleanupDuplicates = async () => {
     const contactsWithSiret = contacts.filter(c => c.siret && c.siret.trim() !== "");
     const groupedBySiret = {};
@@ -290,376 +471,384 @@ export default function ContactsView() {
     }
   };
 
-  const currentList = contactLists.find(l => l.id === activeListId) || contactLists[0];
+  const currentList = contactLists.find(l => l.id === activeListId) || (activeListId === "list-default" ? { name: "Tous les contacts" } : contactLists[0]);
 
-  const SortIcon = ({ columnKey }) => {
-    if (sortConfig.key !== columnKey) return <ArrowUpDown className="ml-1 w-3 h-3 text-slate-300" />;
-    return sortConfig.direction === "asc" ? <SortAsc className="ml-1 w-3 h-3 text-green-600" /> : <SortDesc className="ml-1 w-3 h-3 text-green-600" />;
+  const dropAnimation = {
+    sideEffects: defaultDropAnimationSideEffects({
+      styles: {
+        active: {
+          opacity: "0.5",
+        },
+      },
+    }),
   };
 
   return (
-    <div className="flex h-full gap-6">
-      {/* Sidebar */}
-      <div className="w-64 shrink-0 flex flex-col gap-6">
-        <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-4">
-          <div className="flex items-center justify-between px-2">
-            <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Répertoires</h3>
-            <Button variant="ghost" size="icon" className="h-6 w-6 text-green-600" onClick={() => setIsNewPipelineOpen(true)}>
-              <PlusCircle className="w-4 h-4" />
-            </Button>
-          </div>
-          
-          <div className="space-y-1">
-            {contactLists.map(list => (
-              <div 
-                key={list.id}
-                onClick={() => setActiveListId(list.id)}
-                className={`group flex items-center justify-between px-3 py-2.5 rounded-xl cursor-pointer transition-all ${activeListId === list.id ? 'bg-green-600 text-white shadow-md shadow-green-100' : 'hover:bg-slate-50 text-slate-600'}`}
-              >
-                <div className="flex items-center gap-3 overflow-hidden">
-                  <Folder className={`w-4 h-4 shrink-0 ${activeListId === list.id ? 'text-white' : 'text-slate-400'}`} />
-                  <span className="text-sm font-bold truncate">{list.name}</span>
-                </div>
-                {isAdmin && activeListId !== list.id && list.id !== "list-default" && (
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild>
-                      <button 
-                        className="p-1 hover:bg-red-500/20 rounded transition-colors"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" />
-                      </button>
-                    </AlertDialogTrigger>
-                    <AlertDialogContent onClick={(e) => e.stopPropagation()}>
-                      <AlertDialogHeader>
-                        <AlertDialogTitle>Supprimer le répertoire ?</AlertDialogTitle>
-                        <AlertDialogDescription>
-                          Voulez-vous vraiment supprimer <strong>{list.name}</strong> ?<br />
-                          Cela supprimera également les <strong>{contacts.filter(c => c.listId === list.id).length} contacts</strong> associés.
-                        </AlertDialogDescription>
-                      </AlertDialogHeader>
-                      <AlertDialogFooter>
-                        <AlertDialogCancel>Annuler</AlertDialogCancel>
-                        <AlertDialogAction 
-                          onClick={() => handleDeleteList(list.id)}
-                          className="bg-red-600 hover:bg-red-700"
-                        >
-                          Confirmer la suppression
-                        </AlertDialogAction>
-                      </AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="bg-green-600 rounded-2xl p-6 text-white shadow-xl shadow-green-100 relative overflow-hidden">
-          <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 text-white">Total Contacts</p>
-          <h4 className="text-3xl font-black mt-1 text-white">{contacts.length}</h4>
-          <Users className="absolute -bottom-2 -right-2 w-16 h-16 opacity-10 text-white" />
-        </div>
-      </div>
-
-      {/* Main Content */}
-      <div className="flex-1 space-y-6 min-w-0">
-        <div className="flex justify-between items-end bg-white p-6 rounded-2xl border shadow-sm">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Badge variant="outline" className="bg-green-50 text-green-700 border-green-100 py-0 text-[10px] font-black uppercase">Vue Active</Badge>
-              <h2 className="text-2xl font-black text-slate-900">{currentList?.name}</h2>
-            </div>
-            <p className="text-slate-500 text-sm font-medium">{listContacts.length} contacts affichés</p>
-          </div>
-          <div className="flex items-center gap-3">
-            {isAdmin && (
-              <Button 
-                variant="outline" 
-                onClick={handleCleanupDuplicates} 
-                disabled={isCleaning}
-                className="border-amber-200 text-amber-700 hover:bg-amber-50"
-              >
-                {isCleaning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
-                Nettoyer les doublons
+    <DndContext 
+      sensors={sensors} 
+      onDragStart={handleDragStart} 
+      onDragEnd={handleDragEnd}
+    >
+      <div className="flex h-full gap-6">
+        {/* Sidebar */}
+        <div className="w-64 shrink-0 flex flex-col gap-6">
+          <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-4">
+            <div className="flex items-center justify-between px-2">
+              <h3 className="text-xs font-black uppercase tracking-widest text-slate-400">Répertoires</h3>
+              <Button variant="ghost" size="icon" className="h-6 w-6 text-green-600" onClick={() => setIsNewPipelineOpen(true)}>
+                <PlusCircle className="w-4 h-4" />
               </Button>
-            )}
-            <Button variant="outline" onClick={() => setIsImportOpen(true)} className="border-slate-200 text-slate-600 hover:bg-slate-50">
-              <Upload className="w-4 h-4 mr-2" /> Importer
-            </Button>
-            <Button onClick={() => { setSelectedContact(null); setIsSheetOpen(true); }} className="bg-green-600 hover:bg-green-700 shadow-lg shadow-green-100 px-6 text-white">
-              <Plus className="w-4 h-4 mr-2" /> Nouveau Contact
-            </Button>
-          </div>
-        </div>
-
-        <div className="bg-white p-4 rounded-2xl border shadow-sm space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <Input 
-              placeholder={`Rechercher...`} 
-              className="pl-10 border-slate-100 bg-slate-50/50" 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Select value={tagFilter} onValueChange={setTagFilter}>
-              <SelectTrigger className="w-[140px] h-9 text-xs border-slate-100 bg-slate-50/50">
-                <SelectValue placeholder="Catégorie" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Toutes Catégories</SelectItem>
-                <SelectItem value="client">Clients</SelectItem>
-                <SelectItem value="prospect">Prospects</SelectItem>
-                <SelectItem value="partenaire">Partenaires</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={sectorFilter} onValueChange={setSectorFilter}>
-              <SelectTrigger className="w-[140px] h-9 text-xs border-slate-100 bg-slate-50/50">
-                <SelectValue placeholder="Secteur" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tous Secteurs</SelectItem>
-                {sectors.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-              </SelectContent>
-            </Select>
-
-            <Select value={agentFilter} onValueChange={setAgentFilter}>
-              <SelectTrigger className="w-[140px] h-9 text-xs border-slate-100 bg-slate-50/50">
-                <SelectValue placeholder="Agent" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tous les Agents</SelectItem>
-                {(state?.users || []).map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            </div>
             
-            {(tagFilter !== "all" || sectorFilter !== "all" || agentFilter !== "all" || searchTerm) && (
-              <Button variant="ghost" size="sm" className="text-[10px] text-slate-400 uppercase font-bold" onClick={() => {
-                setSearchTerm("");
-                setTagFilter("all");
-                setSectorFilter("all");
-                setAgentFilter("all");
-              }}>
-                Effacer filtres
-              </Button>
-            )}
+            <div className="space-y-1">
+              <DroppableAllContacts 
+                activeListId={activeListId} 
+                onClick={setActiveListId} 
+              />
+              
+              {contactLists.map(list => (
+                <DroppableFolder 
+                  key={list.id}
+                  list={list}
+                  activeListId={activeListId}
+                  onClick={setActiveListId}
+                  onDelete={handleDeleteList}
+                  isAdmin={isAdmin}
+                  contactsCount={contacts.filter(c => c.listId === list.id).length}
+                />
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-green-600 rounded-2xl p-6 text-white shadow-xl shadow-green-100 relative overflow-hidden">
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 text-white">Total Contacts</p>
+            <h4 className="text-3xl font-black mt-1 text-white">{contacts.length}</h4>
+            <Users className="absolute -bottom-2 -right-2 w-16 h-16 opacity-10 text-white" />
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-          <Table>
-            <TableHeader>
-              <TableRow className="bg-slate-50/50">
-                <TableHead onClick={() => handleSort("name")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
-                  <div className="flex items-center">Nom <SortIcon columnKey="name" /></div>
-                </TableHead>
-                <TableHead onClick={() => handleSort("company")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
-                  <div className="flex items-center">Entreprise <SortIcon columnKey="company" /></div>
-                </TableHead>
-                <TableHead className="font-bold text-slate-900 text-xs">SIRET</TableHead>
-                <TableHead className="font-bold text-slate-900 text-xs">CP</TableHead>
-                <TableHead onClick={() => handleSort("industry")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
-                  <div className="flex items-center">Secteur <SortIcon columnKey="industry" /></div>
-                </TableHead>
-                <TableHead className="font-bold text-slate-900 text-xs">Téléphone</TableHead>
-                <TableHead className="font-bold text-slate-900 text-xs">Email</TableHead>
-                <TableHead onClick={() => handleSort("lastModified")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
-                  <div className="flex items-center">Modifié <SortIcon columnKey="lastModified" /></div>
-                </TableHead>
-                <TableHead className="font-bold text-slate-900 text-xs">Agent</TableHead>
-                <TableHead className="font-bold text-slate-900 w-[200px] text-xs">Commentaires</TableHead>
-                <TableHead className="text-right"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedContacts.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="h-40 text-center text-slate-400 italic text-sm">Aucun résultat</TableCell>
-                </TableRow>
-              ) : (
-                paginatedContacts.map((contact) => {
-                  const agent = state?.users?.find(u => u.id === contact.assignedAgentId);
-                  return (
-                    <TableRow key={contact.id} className="cursor-pointer group hover:bg-slate-50/30 transition-colors" onClick={() => { setSelectedContact(contact); setIsSheetOpen(true); }}>
-                      <TableCell className="font-black text-slate-800 py-4 text-xs">
-                        {contact.firstName} {contact.lastName}
-                      </TableCell>
-                      <TableCell className="text-slate-600 font-medium text-xs">
-                        {contact.company || "-"}
-                      </TableCell>
-                      <TableCell className="text-slate-500 text-[10px] font-mono">
-                        {contact.siret || "-"}
-                      </TableCell>
-                      <TableCell className="text-slate-500 text-[10px] font-bold">
-                        {contact.postalCode || "-"}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="text-[9px] uppercase font-bold bg-slate-50 border-slate-100">
-                          {contact.industry || "-"}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-xs text-slate-600 font-bold whitespace-nowrap">
-                        {contact.phone || "-"}
-                      </TableCell>
-                      <TableCell className="text-[11px] text-blue-600 font-medium truncate max-w-[120px]">
-                        {contact.email || "-"}
-                      </TableCell>
-                      <TableCell className="text-[10px] text-slate-400 whitespace-nowrap">
-                        {contact.lastModified ? format(new Date(contact.lastModified), "dd/MM HH:mm") : "-"}
-                      </TableCell>
-                      <TableCell>
-                        {agent ? (
-                          <div className="flex items-center gap-2">
-                            <div className="w-5 h-5 rounded-full border shadow-sm" style={{ backgroundColor: agent.color || "#ccc" }} />
-                            <span className="text-[11px] font-bold text-slate-700">{agent.name}</span>
-                          </div>
-                        ) : (
-                          <span className="text-slate-300 text-[10px] italic">Libre</span>
-                        )}
-                      </TableCell>
-                      <TableCell onClick={e => e.stopPropagation()}>
-                        {editingCommentId === contact.id ? (
-                          <div className="flex items-center gap-2">
-                            <Input 
-                              autoFocus
-                              className="h-8 text-[11px] border-green-300"
-                              value={tempComment}
-                              onChange={e => setTempComment(e.target.value)}
-                              onKeyDown={e => e.key === 'Enter' && saveComment(contact.id)}
-                              onBlur={() => saveComment(contact.id)}
-                            />
-                          </div>
-                        ) : (
-                          <div 
-                            className="text-[11px] text-slate-500 line-clamp-1 italic hover:bg-slate-100 p-1 rounded cursor-text"
-                            onClick={(e) => startEditingComment(e, contact)}
-                          >
-                            {contact.notes || "Note..."}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right" onClick={e => e.stopPropagation()}>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <MoreVertical className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => { setSelectedContact(contact); setIsSheetOpen(true); }}>
-                              Détails / Modifier
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e) => handleCreateDealForContact(e, contact)} className="text-green-600 font-bold">
-                              <Briefcase className="w-4 h-4 mr-2" /> Créer une Affaire
-                            </DropdownMenuItem>
-                            {isAdmin && (
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
-                                  <DropdownMenuItem className="text-red-600" onSelect={(e) => e.preventDefault()}>
-                                    <Trash2 className="w-4 h-4 mr-2" /> Supprimer
-                                  </DropdownMenuItem>
-                                </AlertDialogTrigger>
-                                <AlertDialogContent>
-                                  <AlertDialogHeader>
-                                    <AlertDialogTitle>Supprimer le contact ?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                      Voulez-vous vraiment supprimer <strong>{contact.firstName} {contact.lastName}</strong> ?
-                                    </AlertDialogDescription>
-                                  </AlertDialogHeader>
-                                  <AlertDialogFooter>
-                                    <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                    <AlertDialogAction onClick={() => dispatch({ type: "UPDATE_CONTACTS", payload: contacts.filter(c => c.id !== contact.id) })} className="bg-red-600">Supprimer</AlertDialogAction>
-                                  </AlertDialogFooter>
-                                </AlertDialogContent>
-                              </AlertDialog>
-                            )}
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })
+        {/* Main Content */}
+        <div className="flex-1 space-y-6 min-w-0">
+          <div className="flex justify-between items-end bg-white p-6 rounded-2xl border shadow-sm">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-100 py-0 text-[10px] font-black uppercase">Vue Active</Badge>
+                <h2 className="text-2xl font-black text-slate-900">{currentList?.name}</h2>
+              </div>
+              <p className="text-slate-500 text-sm font-medium">{listContacts.length} contacts affichés</p>
+            </div>
+            <div className="flex items-center gap-3">
+              {isAdmin && (
+                <Button 
+                  variant="outline" 
+                  onClick={handleCleanupDuplicates} 
+                  disabled={isCleaning}
+                  className="border-amber-200 text-amber-700 hover:bg-amber-50"
+                >
+                  {isCleaning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                  Nettoyer les doublons
+                </Button>
               )}
-            </TableBody>
-          </Table>
-        </div>
-
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between bg-white p-4 rounded-2xl border shadow-sm">
-            <div className="text-xs text-slate-500 font-medium">
-              Affichage de <span className="font-bold text-slate-900">{((currentPage - 1) * ITEMS_PER_PAGE) + 1}</span> à <span className="font-bold text-slate-900">{Math.min(currentPage * ITEMS_PER_PAGE, filteredContacts.length)}</span> sur <span className="font-bold text-slate-900">{filteredContacts.length}</span>
-            </div>
-            <div className="flex items-center gap-4">
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="h-8 flex gap-2" 
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-              >
-                <ChevronLeft className="w-4 h-4" /> Précédent
+              <Button variant="outline" onClick={() => setIsImportOpen(true)} className="border-slate-200 text-slate-600 hover:bg-slate-50">
+                <Upload className="w-4 h-4 mr-2" /> Importer
               </Button>
-              <span className="text-xs font-bold text-slate-600 tracking-widest uppercase">Page {currentPage} / {totalPages}</span>
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="h-8 flex gap-2" 
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-              >
-                Suivant <ChevronRight className="w-4 h-4" />
+              <Button onClick={() => { setSelectedContact(null); setIsSheetOpen(true); }} className="bg-green-600 hover:bg-green-700 shadow-lg shadow-green-100 px-6 text-white">
+                <Plus className="w-4 h-4 mr-2" /> Nouveau Contact
               </Button>
             </div>
           </div>
-        )}
-      </div>
 
-      {/* Dialog creation nouvelle liste */}
-      <Dialog open={isNewListOpen} onOpenChange={setIsNewPipelineOpen}>
-        <DialogContent className="sm:max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>Nouveau Répertoire</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Nom du fichier / liste</Label>
+          <div className="bg-white p-4 rounded-2xl border shadow-sm space-y-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <Input 
-                placeholder="Ex: Prospects Salon 2025" 
-                value={newListName} 
-                onChange={e => setNewListName(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleCreateList()}
+                placeholder={`Rechercher...`} 
+                className="pl-10 border-slate-100 bg-slate-50/50" 
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
               />
             </div>
+            <div className="flex flex-wrap gap-3">
+              <Select value={tagFilter} onValueChange={setTagFilter}>
+                <SelectTrigger className="w-[140px] h-9 text-xs border-slate-100 bg-slate-50/50">
+                  <SelectValue placeholder="Catégorie" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Toutes Catégories</SelectItem>
+                  <SelectItem value="client">Clients</SelectItem>
+                  <SelectItem value="prospect">Prospects</SelectItem>
+                  <SelectItem value="partenaire">Partenaires</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={sectorFilter} onValueChange={setSectorFilter}>
+                <SelectTrigger className="w-[140px] h-9 text-xs border-slate-100 bg-slate-50/50">
+                  <SelectValue placeholder="Secteur" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous Secteurs</SelectItem>
+                  {sectors.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+
+              <Select value={agentFilter} onValueChange={setAgentFilter}>
+                <SelectTrigger className="w-[140px] h-9 text-xs border-slate-100 bg-slate-50/50">
+                  <SelectValue placeholder="Agent" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tous les Agents</SelectItem>
+                  {(state?.users || []).map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              
+              {(tagFilter !== "all" || sectorFilter !== "all" || agentFilter !== "all" || searchTerm) && (
+                <Button variant="ghost" size="sm" className="text-[10px] text-slate-400 uppercase font-bold" onClick={() => {
+                  setSearchTerm("");
+                  setTagFilter("all");
+                  setSectorFilter("all");
+                  setAgentFilter("all");
+                }}>
+                  Effacer filtres
+                </Button>
+              )}
+            </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsNewPipelineOpen(false)}>Annuler</Button>
-            <Button className="bg-green-600 text-white" onClick={handleCreateList}>Créer la liste</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
-      <ContactSheet 
-        contact={selectedContact} 
-        open={isSheetOpen} 
-        onOpenChange={setIsSheetOpen} 
-        activeListId={activeListId}
-      />
+          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="bg-slate-50/50">
+                  <TableHead className="w-10"></TableHead>
+                  <TableHead onClick={() => handleSort("name")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
+                    <div className="flex items-center">Nom <SortIcon columnKey="name" sortConfig={sortConfig} /></div>
+                  </TableHead>
+                  <TableHead onClick={() => handleSort("company")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
+                    <div className="flex items-center">Entreprise <SortIcon columnKey="company" sortConfig={sortConfig} /></div>
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-900 text-xs">SIRET</TableHead>
+                  <TableHead className="font-bold text-slate-900 text-xs">CP</TableHead>
+                  <TableHead onClick={() => handleSort("industry")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
+                    <div className="flex items-center">Secteur <SortIcon columnKey="industry" sortConfig={sortConfig} /></div>
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-900 text-xs">Téléphone</TableHead>
+                  <TableHead className="font-bold text-slate-900 text-xs">Email</TableHead>
+                  <TableHead onClick={() => handleSort("lastModified")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
+                    <div className="flex items-center">Modifié <SortIcon columnKey="lastModified" sortConfig={sortConfig} /></div>
+                  </TableHead>
+                  <TableHead className="font-bold text-slate-900 text-xs">Agent</TableHead>
+                  <TableHead className="font-bold text-slate-900 w-[200px] text-xs">Commentaires</TableHead>
+                  <TableHead className="text-right"></TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paginatedContacts.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={11} className="h-40 text-center text-slate-400 italic text-sm">Aucun résultat</TableCell>
+                  </TableRow>
+                ) : (
+                  paginatedContacts.map((contact) => {
+                    const agent = state?.users?.find(u => u.id === contact.assignedAgentId);
+                    return (
+                      <DraggableContactRow 
+                        key={contact.id} 
+                        contact={contact}
+                        onSelect={() => { setSelectedContact(contact); setIsSheetOpen(true); }}
+                      >
+                        <TableCell className="font-black text-slate-800 py-4 text-xs">
+                          {contact.firstName} {contact.lastName}
+                        </TableCell>
+                        <TableCell className="text-slate-600 font-medium text-xs">
+                          {contact.company || "-"}
+                        </TableCell>
+                        <TableCell className="text-slate-500 text-[10px] font-mono">
+                          {contact.siret || "-"}
+                        </TableCell>
+                        <TableCell className="text-slate-500 text-[10px] font-bold">
+                          {contact.postalCode || "-"}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="text-[9px] uppercase font-bold bg-slate-50 border-slate-100">
+                            {contact.industry || "-"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-600 font-bold whitespace-nowrap">
+                          {contact.phone || "-"}
+                        </TableCell>
+                        <TableCell className="text-[11px] text-blue-600 font-medium truncate max-w-[120px]">
+                          {contact.email || "-"}
+                        </TableCell>
+                        <TableCell className="text-[10px] text-slate-400 whitespace-nowrap">
+                          {contact.lastModified ? format(new Date(contact.lastModified), "dd/MM HH:mm") : "-"}
+                        </TableCell>
+                        <TableCell>
+                          {agent ? (
+                            <div className="flex items-center gap-2">
+                              <div className="w-5 h-5 rounded-full border shadow-sm" style={{ backgroundColor: agent.color || "#ccc" }} />
+                              <span className="text-[11px] font-bold text-slate-700">{agent.name}</span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-300 text-[10px] italic">Libre</span>
+                          )}
+                        </TableCell>
+                        <TableCell onClick={e => e.stopPropagation()}>
+                          {editingCommentId === contact.id ? (
+                            <div className="flex items-center gap-2">
+                              <Input 
+                                autoFocus
+                                className="h-8 text-[11px] border-green-300"
+                                value={tempComment}
+                                onChange={e => setTempComment(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && saveComment(contact.id)}
+                                onBlur={() => saveComment(contact.id)}
+                              />
+                            </div>
+                          ) : (
+                            <div 
+                              className="text-[11px] text-slate-500 line-clamp-1 italic hover:bg-slate-100 p-1 rounded cursor-text"
+                              onClick={(e) => startEditingComment(e, contact)}
+                            >
+                              {contact.notes || "Note..."}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <MoreVertical className="w-4 h-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => { setSelectedContact(contact); setIsSheetOpen(true); }}>
+                                Détails / Modifier
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={(e) => handleCreateDealForContact(e, contact)} className="text-green-600 font-bold">
+                                <Briefcase className="w-4 h-4 mr-2" /> Créer une Affaire
+                              </DropdownMenuItem>
+                              {isAdmin && (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <DropdownMenuItem className="text-red-600" onSelect={(e) => e.preventDefault()}>
+                                      <Trash2 className="w-4 h-4 mr-2" /> Supprimer
+                                    </DropdownMenuItem>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Supprimer le contact ?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Voulez-vous vraiment supprimer <strong>{contact.firstName} {contact.lastName}</strong> ?
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                      <AlertDialogAction onClick={() => dispatch({ type: "UPDATE_CONTACTS", payload: contacts.filter(c => c.id !== contact.id) })} className="bg-red-600">Supprimer</AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </DraggableContactRow>
+                    );
+                  })
+                )}
+              </TableBody>
+            </Table>
+          </div>
 
-      <ImportContactsDialog 
-        open={isImportOpen}
-        onOpenChange={setIsImportOpen}
-        activeListId={activeListId}
-      />
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-between bg-white p-4 rounded-2xl border shadow-sm">
+              <div className="text-xs text-slate-500 font-medium">
+                Affichage de <span className="font-bold text-slate-900">{((currentPage - 1) * ITEMS_PER_PAGE) + 1}</span> à <span className="font-bold text-slate-900">{Math.min(currentPage * ITEMS_PER_PAGE, filteredContacts.length)}</span> sur <span className="font-bold text-slate-900">{filteredContacts.length}</span>
+              </div>
+              <div className="flex items-center gap-4">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-8 flex gap-2" 
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                >
+                  <ChevronLeft className="w-4 h-4" /> Précédent
+                </Button>
+                <span className="text-xs font-bold text-slate-600 tracking-widest uppercase">Page {currentPage} / {totalPages}</span>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-8 flex gap-2" 
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                >
+                  Suivant <ChevronRight className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
 
-      <NewCardDialog 
-        open={isNewCardOpen}
-        onOpenChange={setIsNewCardOpen}
-        defaultContactId={selectedContact?.id}
-      />
-    </div>
+        {/* Dialog creation nouvelle liste */}
+        <Dialog open={isNewListOpen} onOpenChange={setIsNewPipelineOpen}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle>Nouveau Répertoire</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label>Nom du fichier / liste</Label>
+                <Input 
+                  placeholder="Ex: Prospects Salon 2025" 
+                  value={newListName} 
+                  onChange={e => setNewListName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleCreateList()}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsNewPipelineOpen(false)}>Annuler</Button>
+              <Button className="bg-green-600 text-white" onClick={handleCreateList}>Créer la liste</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <ContactSheet 
+          contact={selectedContact} 
+          open={isSheetOpen} 
+          onOpenChange={setIsSheetOpen} 
+          activeListId={activeListId}
+        />
+
+        <ImportContactsDialog 
+          open={isImportOpen}
+          onOpenChange={setIsImportOpen}
+          activeListId={activeListId}
+        />
+
+        <NewCardDialog 
+          open={isNewCardOpen}
+          onOpenChange={setIsNewCardOpen}
+          defaultContactId={selectedContact?.id}
+        />
+
+        <DragOverlay dropAnimation={dropAnimation}>
+          {activeDraggingContact ? (
+            <div className="bg-white p-4 rounded-xl shadow-2xl border-2 border-green-500 flex items-center gap-3 min-w-[200px] opacity-90 cursor-grabbing">
+              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
+                <Users className="w-5 h-5 text-green-600" />
+              </div>
+              <div>
+                <p className="font-black text-slate-900 text-sm">
+                  {activeDraggingContact.firstName} {activeDraggingContact.lastName}
+                </p>
+                <p className="text-xs text-slate-500 font-medium">
+                  {activeDraggingContact.company || "Sans entreprise"}
+                </p>
+              </div>
+            </div>
+          ) : null}
+        </DragOverlay>
+      </div>
+    </DndContext>
   );
 }
