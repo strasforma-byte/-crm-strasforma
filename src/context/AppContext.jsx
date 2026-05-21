@@ -54,6 +54,14 @@ export function AppProvider({ children }) {
     const initApp = async () => {
       dispatch({ type: "SET_LOADING", payload: true });
       
+      // Check for Supabase configuration
+      if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
+        toast.error("Configuration Supabase manquante !", {
+          description: "Les variables d'environnement VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY ne sont pas définies.",
+          duration: 10000,
+        });
+      }
+
       // Check for session
       const { data: { session } } = await supabase.auth.getSession();
       

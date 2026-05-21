@@ -247,33 +247,42 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 shadow-xl border-slate-100" align="start">
-                <Command className="rounded-lg">
+                <Command 
+                  className="rounded-lg"
+                  filter={(value, search) => {
+                    if (value.toLowerCase().includes(search.toLowerCase())) return 1;
+                    return 0;
+                  }}
+                >
                   <CommandInput placeholder="Nom ou Société..." className="h-9 text-xs" />
                   <CommandList className="max-h-[200px]">
                     <CommandEmpty className="py-2 text-[10px] text-slate-400 text-center">Aucun résultat</CommandEmpty>
                     <CommandGroup>
-                      {state.contacts.map((c) => (
-                        <CommandItem
-                          key={c.id}
-                          value={`${c.firstName} ${c.lastName} ${c.company}`}
-                          className="py-1 px-2 cursor-pointer"
-                          onSelect={() => {
-                            setFormData({ ...formData, clientId: c.id });
-                            setIsClientSearchOpen(false);
-                          }}
-                        >
-                          <Check
-                            className={cn(
-                              "mr-2 h-3 w-3 text-green-600",
-                              formData.clientId === c.id ? "opacity-100" : "opacity-0"
-                            )}
-                          />
-                          <div className="flex flex-col min-w-0">
-                            <span className="font-bold text-[11px] truncate">{c.firstName} {c.lastName}</span>
-                            <span className="text-[9px] text-slate-400 uppercase truncate font-medium">{c.company}</span>
-                          </div>
-                        </CommandItem>
-                      ))}
+                      {state.contacts.map((c) => {
+                        const searchValue = `${c.firstName} ${c.lastName} ${c.company}`.toLowerCase();
+                        return (
+                          <CommandItem
+                            key={c.id}
+                            value={searchValue}
+                            className="py-1 px-2 cursor-pointer"
+                            onSelect={() => {
+                              setFormData({ ...formData, clientId: c.id });
+                              setIsClientSearchOpen(false);
+                            }}
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-3 w-3 text-green-600",
+                                formData.clientId === c.id ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-bold text-[11px] truncate">{c.firstName} {c.lastName}</span>
+                              <span className="text-[9px] text-slate-400 uppercase truncate font-medium">{c.company}</span>
+                            </div>
+                          </CommandItem>
+                        );
+                      })}
                     </CommandGroup>
                   </CommandList>
                 </Command>
