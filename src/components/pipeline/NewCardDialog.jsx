@@ -208,52 +208,55 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
           <DialogTitle>Nouvelle Affaire</DialogTitle>
         </DialogHeader>
         
-        <div className="grid grid-cols-2 gap-6 py-4">
-          <div className="col-span-2 space-y-2">
-            <Label>Titre de l'affaire *</Label>
+        <div className="grid grid-cols-2 gap-x-6 gap-y-4 py-4">
+          <div className="col-span-2 space-y-1.5">
+            <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Titre de l'affaire *</Label>
             <Input 
               placeholder="Ex: Refonte Site Web" 
+              className="h-9 text-xs border-slate-200 bg-slate-50/50"
               value={formData.title} 
               onChange={e => setFormData({...formData, title: e.target.value})} 
             />
           </div>
 
-          <div className="space-y-2">
-            <Label className="flex justify-between items-center">
+          <div className="space-y-1.5">
+            <Label className="flex justify-between items-center text-[11px] uppercase font-black tracking-wider text-slate-500">
               <span>Client lié *</span>
-              <Button variant="ghost" className="h-5 px-1 text-[10px] text-green-600 hover:bg-green-50" onClick={() => setIsQuickContactOpen(true)}>
-                + Nouveau contact
+              <Button variant="ghost" className="h-4 px-1 text-[9px] text-green-600 hover:bg-green-50 font-black" onClick={() => setIsQuickContactOpen(true)}>
+                + NOUVEAU
               </Button>
             </Label>
+            {/* ... Client Popover stays as updated ... */}
             <Popover open={isClientSearchOpen} onOpenChange={setIsClientSearchOpen}>
               <PopoverTrigger asChild>
                 <Button
                   variant="outline"
                   role="combobox"
                   aria-expanded={isClientSearchOpen}
-                  className="w-full justify-between font-normal"
+                  className="w-full h-9 justify-between font-medium border-slate-200 bg-slate-50/50"
                 >
                   <div className="flex items-center gap-2 overflow-hidden">
-                    <Building2 className="w-4 h-4 text-slate-400 shrink-0" />
-                    <span className="truncate">
+                    <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                    <span className="truncate text-xs">
                       {selectedContact 
                         ? `${selectedContact.firstName} ${selectedContact.lastName} (${selectedContact.company})`
-                        : "Rechercher un client..."}
+                        : "Rechercher..."}
                     </span>
                   </div>
-                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-30" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0">
-                <Command>
-                  <CommandInput placeholder="Tapez le nom ou la société..." />
-                  <CommandList>
-                    <CommandEmpty>Aucun client trouvé.</CommandEmpty>
+              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 shadow-xl border-slate-100" align="start">
+                <Command className="rounded-lg">
+                  <CommandInput placeholder="Nom ou Société..." className="h-9 text-xs" />
+                  <CommandList className="max-h-[200px]">
+                    <CommandEmpty className="py-2 text-[10px] text-slate-400 text-center">Aucun résultat</CommandEmpty>
                     <CommandGroup>
                       {state.contacts.map((c) => (
                         <CommandItem
                           key={c.id}
                           value={`${c.firstName} ${c.lastName} ${c.company}`}
+                          className="py-1 px-2 cursor-pointer"
                           onSelect={() => {
                             setFormData({ ...formData, clientId: c.id });
                             setIsClientSearchOpen(false);
@@ -261,13 +264,13 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
                         >
                           <Check
                             className={cn(
-                              "mr-2 h-4 w-4",
+                              "mr-2 h-3 w-3 text-green-600",
                               formData.clientId === c.id ? "opacity-100" : "opacity-0"
                             )}
                           />
-                          <div className="flex flex-col">
-                            <span className="font-bold">{c.firstName} {c.lastName}</span>
-                            <span className="text-[10px] text-slate-500 uppercase">{c.company}</span>
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-bold text-[11px] truncate">{c.firstName} {c.lastName}</span>
+                            <span className="text-[9px] text-slate-400 uppercase truncate font-medium">{c.company}</span>
                           </div>
                         </CommandItem>
                       ))}
@@ -278,59 +281,59 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
             </Popover>
           </div>
 
-          <div className="space-y-2">
-            <Label>Valeur (€)</Label>
+          <div className="space-y-1.5">
+            <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Valeur (€)</Label>
             <div className="relative">
-              <Euro className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <Euro className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
               <Input 
                 type="number" 
-                className="pl-10" 
+                className="pl-9 h-9 text-xs border-slate-200 bg-slate-50/50" 
                 value={formData.value} 
                 onChange={e => setFormData({...formData, value: e.target.value})} 
               />
             </div>
           </div>
 
-          <div className="space-y-2">
-            <Label>Pipeline *</Label>
+          <div className="space-y-1.5">
+            <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Pipeline *</Label>
             <Select value={formData.pipelineId} onValueChange={handlePipelineChange}>
-              <SelectTrigger>
+              <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {state.pipelines.map(p => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  <SelectItem key={p.id} value={p.id} className="text-xs">{p.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label>Étape *</Label>
+          <div className="space-y-1.5">
+            <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Étape *</Label>
             <Select value={formData.columnId} onValueChange={val => setFormData({...formData, columnId: val})}>
-              <SelectTrigger>
+              <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {state.pipelines.find(p => p.id === formData.pipelineId)?.columns.map(col => (
-                  <SelectItem key={col.id} value={col.id}>{col.name}</SelectItem>
+                  <SelectItem key={col.id} value={col.id} className="text-xs">{col.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label>Responsable</Label>
+          <div className="space-y-1.5">
+            <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Responsable</Label>
             <Select value={formData.responsibleId} onValueChange={val => setFormData({...formData, responsibleId: val})}>
-              <SelectTrigger>
+              <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
                 <div className="flex items-center gap-2">
-                  <UserIcon className="w-4 h-4 text-slate-400" />
+                  <UserIcon className="w-3.5 h-3.5 text-slate-400" />
                   <SelectValue />
                 </div>
               </SelectTrigger>
               <SelectContent>
                 {state.users.map(u => (
-                  <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                  <SelectItem key={u.id} value={u.id} className="text-xs">{u.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

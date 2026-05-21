@@ -45,6 +45,8 @@ CREATE TABLE contacts (
   phone TEXT,
   email TEXT,
   industry TEXT,
+  siret TEXT,
+  postal_code TEXT,
   tags TEXT[] DEFAULT '{}',
   notes TEXT,
   list_id UUID REFERENCES contact_lists(id) ON DELETE SET NULL,
