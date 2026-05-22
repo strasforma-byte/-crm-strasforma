@@ -39,6 +39,37 @@ const toDbContact = (c) => ({
   last_modified: new Date().toISOString()
 })
 
+const mapCard = (card) => ({
+  id: card.id,
+  title: card.title,
+  value: card.value,
+  priority: card.priority,
+  tags: card.tags || [],
+  order: card.order,
+  contactId: card.contact_id,
+  responsibleId: card.responsible_id,
+  notes: card.notes,
+  nextAction: card.next_action,
+  nextActionDate: card.next_action_date,
+  nextActionType: card.next_action_type || 'call',
+  columnId: card.column_id
+})
+
+const toDbCard = (card) => ({
+  column_id: card.columnId,
+  contact_id: card.contactId || card.clientId,
+  responsible_id: card.responsibleId,
+  title: card.title,
+  value: card.value,
+  priority: card.priority,
+  tags: card.tags,
+  notes: card.notes,
+  next_action: card.nextAction,
+  next_action_date: card.nextActionDate,
+  next_action_type: card.nextActionType,
+  "order": card.order || 0
+})
+
 const mapPipeline = (p) => ({
   id: p.id,
   name: p.name,
@@ -48,15 +79,7 @@ const mapPipeline = (p) => ({
     id: col.id,
     name: col.name,
     order: col.order,
-    cards: col.pipeline_cards ? col.pipeline_cards.map(card => ({
-      id: card.id,
-      title: card.title,
-      value: card.value,
-      priority: card.priority,
-      tags: card.tags || [],
-      order: card.order,
-      contactId: card.contact_id
-    })) : []
+    cards: col.pipeline_cards ? col.pipeline_cards.map(mapCard) : []
   })).sort((a, b) => a.order - b.order) : []
 })
 
@@ -246,31 +269,15 @@ export const db = {
 
   // Pipeline Cards
   async insertCard(card) {
-    const { data, error } = await supabase.from('pipeline_cards').insert({
-      column_id: card.columnId,
-      contact_id: card.contactId,
-      title: card.title,
-      value: card.value,
-      priority: card.priority,
-      tags: card.tags,
-      order: card.order
-    }).select().single()
+    const { data, error } = await supabase.from('pipeline_cards').insert(toDbCard(card)).select().single()
     if (error) throw error
-    return data
+    return mapCard(data)
   },
 
   async updateCard(id, updates) {
-    const { data, error } = await supabase.from('pipeline_cards').update({
-      column_id: updates.columnId,
-      contact_id: updates.contactId,
-      title: updates.title,
-      value: updates.value,
-      priority: updates.priority,
-      tags: updates.tags,
-      order: updates.order
-    }).eq('id', id).select().single()
+    const { data, error } = await supabase.from('pipeline_cards').update(toDbCard(updates)).eq('id', id).select().single()
     if (error) throw error
-    return data
+    return mapCard(data)
   },
 
   async deleteCard(id) {

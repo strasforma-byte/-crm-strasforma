@@ -89,10 +89,15 @@ CREATE TABLE pipeline_cards (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   column_id UUID REFERENCES pipeline_columns(id) ON DELETE CASCADE,
   contact_id UUID REFERENCES contacts(id) ON DELETE SET NULL,
+  responsible_id UUID REFERENCES profiles(id) ON DELETE SET NULL,
   title TEXT,
   value NUMERIC DEFAULT 0,
   priority TEXT DEFAULT 'medium',
   tags TEXT[] DEFAULT '{}',
+  notes TEXT,
+  next_action TEXT,
+  next_action_date TIMESTAMP WITH TIME ZONE,
+  next_action_type TEXT DEFAULT 'call',
   "order" INTEGER NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL
 );
