@@ -22,8 +22,10 @@ import KanbanCard from "./KanbanCard";
 import CardDetailSheet from "./CardDetailSheet";
 import { toast } from "sonner";
 
+import { db } from "@/lib/db";
+
 export default function KanbanBoard({ pipeline }) {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, refreshAllData } = useApp();
   const { isAdmin, currentUser } = usePermissions();
   const [activeCard, setActiveCard] = useState(null);
   const [selectedCard, setSelectedCard] = useState(null);
@@ -117,7 +119,7 @@ export default function KanbanBoard({ pipeline }) {
     dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
   };
 
-  const handleDragEnd = (event) => {
+  const handleDragEnd = async (event) => {
     const { active, over } = event;
     
     if (!over) {
@@ -136,27 +138,87 @@ export default function KanbanBoard({ pipeline }) {
       return;
     }
 
-    if (activeColumn.id === overColumn.id) {
-      const oldIndex = activeColumn.cards.findIndex(c => c.id === activeId);
-      const newIndex = activeColumn.cards.findIndex(c => c.id === overId);
+    try {
+      if (activeColumn.id === overColumn.id) {
+        const oldIndex = activeColumn.cards.findIndex(c => c.id === activeId);
+        const newIndex = overColumn.cards.findIndex(c => c.id === overId);
 
-      if (oldIndex !== newIndex) {
-        const newCards = arrayMove(activeColumn.cards, oldIndex, newIndex);
+        if (oldIndex !== newIndex) {
+          const newCards = arrayMove(activeColumn.cards, oldIndex, newIndex);
+          
+          // In a real scenario, we'd update 'order' for all affected cards.
+          // For now, let's just update the moved card to ensure persistence.
+          const movedCard = activeColumn.cards[oldIndex];
+          await db.updateCard(activeId, { ...movedCard, order: newIndex });
+
+          const updatedPipelines = state.pipelines.map(p => {
+            if (p.id === pipeline.id) {
+              return {
+                ...p,
+                columns: p.columns.map(col => 
+                  col.id === activeColumn.id ? { ...col, cards: newCards } : col
+                )
+              };
+            }
+            return p;
+          });
+          dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+        }
+      } else {
+        // Moved to a different column
+        const movedCard = activeColumn.cards.find(c => c.id === activeId);
+        const targetCards = overColumn.cards;
+        const overIndex = targetCards.findIndex(c => c.id === overId);
+        
+        let newOrder = overIndex >= 0 ? overIndex : targetCards.length;
+
+        // Persist to DB
+        const updatedDbCard = await db.updateCard(activeId, { 
+          ...movedCard, 
+          columnId: overColumn.id,
+          order: newOrder 
+        });
+
+        // Update local state with DB response to ensure UI sync
         const updatedPipelines = state.pipelines.map(p => {
           if (p.id === pipeline.id) {
             return {
               ...p,
-              columns: p.columns.map(col => 
-                col.id === activeColumn.id ? { ...col, cards: newCards } : col
-              )
+              columns: p.columns.map(col => {
+                if (col.id === activeColumn.id) {
+                  return { ...col, cards: col.cards.filter(c => c.id !== activeId) };
+                }
+                if (col.id === overColumn.id) {
+                  const newColCards = [...col.cards];
+                  // Map DB field names to camelCase for state
+                  const mappedCard = {
+                    id: updatedDbCard.id,
+                    title: updatedDbCard.title,
+                    value: updatedDbCard.value,
+                    priority: updatedDbCard.priority,
+                    tags: updatedDbCard.tags || [],
+                    order: updatedDbCard.order,
+                    contactId: updatedDbCard.contact_id,
+                    columnId: updatedDbCard.column_id
+                  };
+                  newColCards.splice(newOrder, 0, mappedCard);
+                  return { ...col, cards: newColCards };
+                }
+                return col;
+              })
             };
           }
           return p;
         });
+
         dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+        toast.success(`Affaire déplacée vers ${overColumn.name}`);
       }
-    } else {
-      toast.success(`Affaire déplacée vers ${overColumn.name}`);
+    } catch (error) {
+      console.error("Error moving card:", error);
+      toast.error("Erreur lors du déplacement");
+      // Optionally reload data to revert UI
+      refreshAllData();
     }
 
     setActiveCard(null);

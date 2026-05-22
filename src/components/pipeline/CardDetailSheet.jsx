@@ -123,51 +123,65 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const updatedDate = formData.nextActionDate;
     if (updatedDate) {
       const [hours, minutes] = formData.nextActionTime.split(":").map(Number);
       updatedDate.setHours(hours, minutes);
     }
 
-    const updatedCard = {
-      ...card,
-      ...formData,
-      nextActionDate: updatedDate ? updatedDate.toISOString() : null,
-      history: [
-        { date: new Date().toISOString(), userId: state.currentUser.id, action: "Affaire modifiée" },
-        ...(card.history || [])
-      ]
-    };
+    try {
+      // Persist to DB
+      const updatedDbCard = await db.updateCard(card.id, {
+        ...card,
+        ...formData,
+        nextActionDate: updatedDate ? updatedDate.toISOString() : null,
+      });
 
-    const updatedPipelines = state.pipelines.map(p => {
-      if (p.id === pipeline.id) {
-        return {
-          ...p,
-          columns: p.columns.map(col => {
-            // Remove from old column if changed
-            if (col.id === card.columnId && col.id !== formData.columnId) {
-              return { ...col, cards: (col.cards || []).filter(c => c.id !== card.id) };
-            }
-            // Add to new column or update in same
-            if (col.id === formData.columnId) {
-              const isUpdate = (col.cards || []).find(c => c.id === card.id);
-              if (isUpdate) {
-                return { ...col, cards: col.cards.map(c => c.id === card.id ? updatedCard : c) };
-              } else {
-                return { ...col, cards: [...(col.cards || []), updatedCard] };
+      // Map DB response to local state structure
+      const updatedCard = {
+        ...card,
+        ...formData,
+        contactId: updatedDbCard.contact_id, // Map database field
+        nextActionDate: updatedDate ? updatedDate.toISOString() : null,
+        history: [
+          { date: new Date().toISOString(), userId: state.currentUser.id, action: "Affaire modifiée" },
+          ...(card.history || [])
+        ]
+      };
+
+      const updatedPipelines = state.pipelines.map(p => {
+        if (p.id === pipeline.id) {
+          return {
+            ...p,
+            columns: p.columns.map(col => {
+              // Remove from old column if changed
+              if (col.id === card.columnId && col.id !== formData.columnId) {
+                return { ...col, cards: (col.cards || []).filter(c => c.id !== card.id) };
               }
-            }
-            return col;
-          })
-        };
-      }
-      return p;
-    });
+              // Add to new column or update in same
+              if (col.id === formData.columnId) {
+                const isUpdate = (col.cards || []).find(c => c.id === card.id);
+                if (isUpdate) {
+                  return { ...col, cards: col.cards.map(c => c.id === card.id ? updatedCard : c) };
+                } else {
+                  return { ...col, cards: [...(col.cards || []), updatedCard] };
+                }
+              }
+              return col;
+            })
+          };
+        }
+        return p;
+      });
 
-    dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
-    toast.success("Affaire mise à jour");
-    onOpenChange(false);
+      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+      toast.success("Affaire mise à jour");
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Error saving card:", error);
+      toast.error("Erreur lors de l'enregistrement de l'affaire");
+    }
   };
 
   const handleDelete = () => {
