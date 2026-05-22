@@ -66,7 +66,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
     if (card) {
       setFormData({
         title: card.title,
-        clientId: card.clientId,
+        clientId: card.contactId || card.clientId || "",
         value: card.value,
         responsibleId: card.responsibleId,
         columnId: card.columnId,
@@ -143,6 +143,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
         ...card,
         ...formData,
         contactId: updatedDbCard.contact_id, // Map database field
+        clientId: updatedDbCard.contact_id,  // Fallback for UI sync
         nextActionDate: updatedDate ? updatedDate.toISOString() : null,
         history: [
           { date: new Date().toISOString(), userId: state.currentUser.id, action: "Affaire modifiée" },
