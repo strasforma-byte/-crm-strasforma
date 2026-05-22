@@ -62,6 +62,8 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
 
+  const [isSaving, setIsSaving] = useState(false);
+
   useEffect(() => {
     if (card) {
       setFormData({
@@ -114,7 +116,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
       
       const savedContact = await db.insertContact(newContactData);
       dispatch({ type: "UPDATE_CONTACTS", payload: [...state.contacts, savedContact] });
-      setFormData({ ...formData, clientId: savedContact.id });
+      setFormData(prev => ({ ...prev, clientId: savedContact.id }));
       setIsQuickContactOpen(false);
       setQuickContact({ firstName: "", lastName: "", company: "", email: "", phone: "", siret: "" });
       toast.success("Contact créé et sélectionné");
@@ -124,6 +126,9 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
   };
 
   const handleSave = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+
     const updatedDate = formData.nextActionDate;
     if (updatedDate) {
       const [hours, minutes] = formData.nextActionTime.split(":").map(Number);
@@ -188,6 +193,8 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
     } catch (error) {
       console.error("Error saving card:", error);
       toast.error("Erreur lors de l'enregistrement de l'affaire");
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -284,7 +291,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
                                   value={searchValue}
                                   className="py-1 px-2 cursor-pointer"
                                   onSelect={() => {
-                                    setFormData({ ...formData, clientId: c.id });
+                                    setFormData(prev => ({ ...prev, clientId: c.id }));
                                     setIsClientSearchOpen(false);
                                   }}
                                 >
