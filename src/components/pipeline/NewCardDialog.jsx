@@ -158,9 +158,8 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
                   priority: savedCard.priority,
                   tags: savedCard.tags || [],
                   order: savedCard.order,
-                  contactId: savedCard.contact_id
-                }] };
-                return updatedCol;
+                  contactId: savedCard.contactId // Use mapped field
+                }] };                return updatedCol;
               }
               return col;
             })

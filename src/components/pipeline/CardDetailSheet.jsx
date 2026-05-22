@@ -141,9 +141,15 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
       // Map DB response to local state structure
       const updatedCard = {
         ...card,
-        ...formData,
-        contactId: updatedDbCard.contact_id, // Identifiant réel de la DB
-        clientId: updatedDbCard.contact_id,  // Fallback pour la synchronisation UI
+        title: formData.title,
+        value: formData.value,
+        responsibleId: formData.responsibleId,
+        columnId: formData.columnId,
+        notes: formData.notes,
+        nextAction: formData.nextAction,
+        nextActionType: formData.nextActionType,
+        contactId: updatedDbCard.contactId, // Utilise le champ mappé correct
+        clientId: updatedDbCard.contactId,  // Fallback pour la synchronisation
         nextActionDate: updatedDate ? updatedDate.toISOString() : null,
         history: [
           { date: new Date().toISOString(), userId: state.currentUser.id, action: "Affaire modifiée" },
