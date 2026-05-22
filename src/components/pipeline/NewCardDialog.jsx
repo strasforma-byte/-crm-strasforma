@@ -16,7 +16,6 @@ import {
   Building2, 
   User as UserIcon, 
   Euro, 
-  Search, 
   Check, 
   ChevronsUpDown,
   Fingerprint
