@@ -29,7 +29,11 @@ export default function KanbanCard({ card, onClick, isOverlay }) {
     opacity: isDragging ? 0.3 : 1,
   };
 
-  const client = state.contacts.find(c => c.id === (card.clientId || card.contactId));
+  const client = state.contacts.find(c => 
+    c.id === card.contactId || 
+    c.id === card.clientId || 
+    c.id === card.contact_id
+  );
   const responsible = state.users.find(u => u.id === card.responsibleId);
 
   // Status bar logic
