@@ -334,7 +334,7 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none" className="text-xs italic">Aucune</SelectItem>
-                {state.pipelines.flatMap(p => p.columns.flatMap(col => col.cards)).map(card => (
+                {(Array.isArray(state.pipelines) ? state.pipelines : []).flatMap(p => (p.columns || []).flatMap(col => (col.cards || []))).map(card => (
                   <SelectItem key={card.id} value={card.id} className="text-xs">{card.title}</SelectItem>
                 ))}
               </SelectContent>

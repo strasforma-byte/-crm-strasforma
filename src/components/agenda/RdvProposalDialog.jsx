@@ -246,6 +246,21 @@ export default function RdvProposalDialog({ open, onOpenChange, commercialId, de
             </Popover>
           </div>
 
+          <div className="col-span-2 space-y-1.5">
+            <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Affaire liée</Label>
+            <Select value={formData.linkedCardId} onValueChange={val => setFormData({...formData, linkedCardId: val})}>
+              <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none" className="text-xs italic">Aucune</SelectItem>
+                {(Array.isArray(state.pipelines) ? state.pipelines : []).flatMap(p => (p.columns || []).flatMap(col => (col.cards || []))).map(card => (
+                  <SelectItem key={card.id} value={card.id} className="text-xs">{card.title}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="space-y-1.5">
             <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Durée (min)</Label>
             <Select value={formData.duration} onValueChange={val => setFormData({...formData, duration: val})}>
