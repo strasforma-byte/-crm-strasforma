@@ -142,35 +142,6 @@ export function AppProvider({ children }) {
     initApp();
   }, []);
 
-  const refreshAllData = async () => {
-    try {
-      const [users, pipelines, contacts, contactLists, tasks, rdvProposals] = await Promise.all([
-        db.getProfiles(),
-        db.getPipelines(),
-        db.getContacts(),
-        db.getContactLists(),
-        db.getTasks(),
-        db.getProposals()
-      ]);
-
-      dispatch({
-        type: "INIT_DATA",
-        payload: {
-          users,
-          pipelines,
-          contacts,
-          contactLists,
-          tasks,
-          rdvProposals
-        }
-      });
-    } catch (error) {
-      console.error("Error loading data from Supabase:", error);
-      toast.error("Erreur lors du chargement des données");
-      dispatch({ type: "SET_LOADING", payload: false });
-    }
-  };
-
   const value = {
     state,
     dispatch,
