@@ -82,7 +82,7 @@ export default function AgendaListView({ tasks, proposals, onTaskClick, onPropos
                           {task.linkedCardId && (
                             <span className="text-xs text-green-600 flex items-center">
                               <Briefcase className="w-3 h-3 mr-1" />
-                              {state.pipelines.flatMap(p => p.columns.flatMap(col => col.cards)).find(c => c.id === task.linkedCardId)?.title}
+                              {(Array.isArray(state.pipelines) ? state.pipelines : []).flatMap(p => (p.columns || []).flatMap(col => (col.cards || []))).find(c => c.id === task.linkedCardId)?.title || "Affaire inconnue"}
                             </span>
                           )}
                         </div>

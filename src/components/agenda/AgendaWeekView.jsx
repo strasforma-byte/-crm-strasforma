@@ -27,11 +27,19 @@ export default function AgendaWeekView({ tasks, proposals, targetUser, onTaskCli
   };
 
   const calculatePosition = (time, duration) => {
-    const [hours, minutes] = time.split(":").map(Number);
-    const startOffset = (hours - 8) * 60 + minutes;
-    const height = (duration / 60) * 80; // 80px per hour
-    const top = (startOffset / 60) * 80;
-    return { top: `${top}px`, height: `${height}px` };
+    if (!time || typeof time !== 'string' || !time.includes(':')) {
+      return { top: '0px', height: '40px' };
+    }
+    try {
+      const [hours, minutes] = time.split(":").map(Number);
+      if (isNaN(hours) || isNaN(minutes)) return { top: '0px', height: '40px' };
+      const startOffset = (hours - 8) * 60 + minutes;
+      const height = (duration / 60) * 80; // 80px per hour
+      const top = (startOffset / 60) * 80;
+      return { top: `${top}px`, height: `${height}px` };
+    } catch (e) {
+      return { top: '0px', height: '40px' };
+    }
   };
 
   return (

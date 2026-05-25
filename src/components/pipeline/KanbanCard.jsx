@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Card, CardContent } from "@/components/ui/card";
@@ -11,6 +11,8 @@ import {
   MoreVertical 
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
+import { cn } from "@/lib/utils";
+import { isToday } from "date-fns";
 
 export default function KanbanCard({ card, onClick, isOverlay }) {
   const { state } = useApp();
@@ -21,7 +23,7 @@ export default function KanbanCard({ card, onClick, isOverlay }) {
     transform,
     transition,
     isDragging
-  } = useSortable({ id: card.id });
+  } = useSortable({ id: card?.id });
 
   const style = {
     transform: CSS.Translate.toString(transform),
@@ -29,36 +31,41 @@ export default function KanbanCard({ card, onClick, isOverlay }) {
     opacity: isDragging ? 0.3 : 1,
   };
 
-  const client = state.contacts.find(c => 
-    c.id === card.contactId || 
-    c.id === card.clientId || 
-    c.id === card.contact_id
+  const client = useMemo(() => 
+    state.contacts.find(c => 
+      c.id === card?.contactId || 
+      c.id === card?.clientId || 
+      c.id === card?.contact_id
+    ),
+    [state.contacts, card]
   );
-  const responsible = state.users.find(u => u.id === card.responsibleId);
+
+  const responsible = useMemo(() => 
+    state.users.find(u => u.id === card?.responsibleId),
+    [state.users, card?.responsibleId]
+  );
 
   // Unified Task Logic: Get the earliest pending task linked to this card
   const nextTask = useMemo(() => {
+    if (!card?.id || !Array.isArray(state.tasks)) return null;
     const cardTasks = state.tasks.filter(t => t.linkedCardId === card.id && t.status !== "done");
     if (cardTasks.length === 0) return null;
-    return cardTasks.sort((a, b) => new Date(a.date) - new Date(b.date))[0];
-  }, [state.tasks, card.id]);
+    return [...cardTasks].sort((a, b) => new Date(a.date) - new Date(b.date))[0];
+  }, [state.tasks, card?.id]);
 
   // Status bar logic based on nextTask
   const getStatusColor = () => {
     if (!nextTask) return "bg-yellow-500";
     const now = new Date();
     const actionDate = new Date(nextTask.date);
+    if (isNaN(actionDate.getTime())) return "bg-yellow-500";
+    
     if (actionDate < now && !isToday(actionDate)) return "bg-red-500";
     if (isToday(actionDate)) return "bg-orange-500";
     return "bg-green-500";
   };
 
-  const isToday = (date) => {
-    const today = new Date();
-    return date.getDate() === today.getDate() &&
-      date.getMonth() === today.getMonth() &&
-      date.getFullYear() === today.getFullYear();
-  };
+  if (!card) return null;
 
   return (
     <Card 

@@ -289,6 +289,10 @@ export const db = {
       description: t.description,
       dueDate: t.due_date,
       date: t.due_date ? t.due_date.split('T')[0] : null,
+      time: t.due_date ? (() => {
+        const d = new Date(t.due_date);
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      })() : '09:00',
       status: t.status,
       assignedTo: t.assigned_to,
       userId: t.assigned_to,
@@ -317,6 +321,10 @@ export const db = {
       description: data.description,
       dueDate: data.due_date,
       date: data.due_date ? data.due_date.split('T')[0] : null,
+      time: data.due_date ? (() => {
+        const d = new Date(data.due_date);
+        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+      })() : '09:00',
       status: data.status,
       assignedTo: data.assigned_to,
       userId: data.assigned_to,

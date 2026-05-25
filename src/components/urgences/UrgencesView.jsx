@@ -97,7 +97,7 @@ export default function UrgencesView() {
 
   const TaskItem = ({ task }) => {
     const contact = state.contacts.find(c => c.id === task.linkedContactId);
-    const card = state.pipelines.flatMap(p => p.columns.flatMap(col => col.cards)).find(c => c.id === task.linkedCardId);
+    const card = (Array.isArray(state.pipelines) ? state.pipelines : []).flatMap(p => (p.columns || []).flatMap(col => (col.cards || []))).find(c => c.id === task.linkedCardId);
     const assignedUser = state.users.find(u => u.id === task.userId);
 
     return (
