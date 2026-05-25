@@ -339,6 +339,12 @@ export const db = {
     if (error) throw error
     return data
   },
+
+  // Proposals
+  async getProposals() {
+    const { data, error } = await supabase.from('rdv_proposals').select('*')
+    if (error) throw error
+    return data.map(p => ({
       id: p.id,
       contactId: p.contact_id,
       agentId: p.agent_id,
