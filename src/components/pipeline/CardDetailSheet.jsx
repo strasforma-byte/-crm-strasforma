@@ -140,6 +140,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
       const updatedDbCard = await db.updateCard(card.id, {
         ...card,
         ...formData,
+        contactId: formData.clientId, // Force la mise à jour du contactId
         nextActionDate: updatedDate ? updatedDate.toISOString() : null,
       });
 
@@ -153,8 +154,8 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
         notes: formData.notes,
         nextAction: formData.nextAction,
         nextActionType: formData.nextActionType,
-        contactId: updatedDbCard.contactId, // Utilise le champ mappé correct
-        clientId: updatedDbCard.contactId,  // Fallback pour la synchronisation
+        contactId: updatedDbCard.contactId,
+        clientId: updatedDbCard.contactId, // Fallback pour la synchronisation
         nextActionDate: updatedDate ? updatedDate.toISOString() : null,
         history: [
           { date: new Date().toISOString(), userId: state.currentUser.id, action: "Affaire modifiée" },

@@ -192,14 +192,9 @@ export default function KanbanBoard({ pipeline }) {
                   const newColCards = [...col.cards];
                   // Map DB field names to camelCase for state
                   const mappedCard = {
-                    id: updatedDbCard.id,
-                    title: updatedDbCard.title,
-                    value: updatedDbCard.value,
-                    priority: updatedDbCard.priority,
-                    tags: updatedDbCard.tags || [],
-                    order: updatedDbCard.order,
-                    contactId: updatedDbCard.contact_id,
-                    columnId: updatedDbCard.column_id
+                    ...updatedDbCard,
+                    columnId: updatedDbCard.columnId,
+                    contactId: updatedDbCard.contactId
                   };
                   newColCards.splice(newOrder, 0, mappedCard);
                   return { ...col, cards: newColCards };

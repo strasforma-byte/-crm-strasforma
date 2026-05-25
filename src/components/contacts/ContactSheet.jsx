@@ -142,7 +142,7 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
   const pipelines = Array.isArray(state.pipelines) ? state.pipelines : [];
   const linkedDeals = pipelines.flatMap(p => 
     (p.columns || []).flatMap(col => 
-      (col.cards || []).filter(card => card.clientId === contact?.id)
+      (col.cards || []).filter(card => card.clientId === contact?.id || card.contactId === contact?.id)
     )
   );
 
