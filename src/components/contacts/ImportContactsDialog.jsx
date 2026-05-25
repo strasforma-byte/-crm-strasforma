@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Upload, FileText, Check, AlertCircle, Loader2 } from "lucide-react";
+import { Upload, FileText, Check, AlertCircle, Loader2, User as UserIcon } from "lucide-react";
 import { toast } from "sonner";
 import * as XLSX from "xlsx";
 
@@ -34,6 +34,7 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
   const [isImporting, setIsImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [targetListId, setTargetListId] = useState(activeListId || "list-default");
+  const [assignedAgentId, setAssignedAgentId] = useState("");
   const [newListName, setNewListName] = useState("");
   const [isCreatingNewList, setIsCreatingNewList] = useState(false);
 
@@ -152,6 +153,7 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
         newContacts.push({
           createdBy: state.currentUser.id,
           listId: finalTargetListId,
+          assignedAgentId: assignedAgentId || null,
           firstName: getVal("firstName"),
           lastName: lastName,
           company: getVal("company"),
@@ -252,41 +254,61 @@ export default function ImportContactsDialog({ open, onOpenChange, activeListId 
                 </div>
               </div>
 
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <Label className="text-xs font-black uppercase tracking-widest text-slate-400">Répertoire de destination</Label>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="h-6 text-[10px] font-bold uppercase text-green-600 hover:text-green-700 hover:bg-green-50 p-0"
-                    onClick={() => setIsCreatingNewList(!isCreatingNewList)}
-                  >
-                    {isCreatingNewList ? "Choisir existant" : "+ Créer nouveau"}
-                  </Button>
-                </div>
-                
-                {isCreatingNewList ? (
-                  <div className="space-y-2">
-                    <Input 
-                      placeholder="Nom du nouveau répertoire..." 
-                      className="bg-slate-50 border-slate-100 h-10"
-                      value={newListName}
-                      onChange={(e) => setNewListName(e.target.value)}
-                    />
-                    <p className="text-[10px] text-slate-400 font-medium italic">Le répertoire sera créé automatiquement au lancement de l'import.</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <Label className="text-xs font-black uppercase tracking-widest text-slate-400">Répertoire de destination</Label>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      className="h-6 text-[10px] font-bold uppercase text-green-600 hover:text-green-700 hover:bg-green-50 p-0"
+                      onClick={() => setIsCreatingNewList(!isCreatingNewList)}
+                    >
+                      {isCreatingNewList ? "Choisir existant" : "+ Créer nouveau"}
+                    </Button>
                   </div>
-                ) : (
-                  <Select value={targetListId} onValueChange={setTargetListId}>
-                    <SelectTrigger className="w-full bg-slate-50 border-slate-100">
-                      <SelectValue />
+                  
+                  {isCreatingNewList ? (
+                    <div className="space-y-2">
+                      <Input 
+                        placeholder="Nom du nouveau répertoire..." 
+                        className="bg-slate-50 border-slate-100 h-10 font-bold"
+                        value={newListName}
+                        onChange={(e) => setNewListName(e.target.value)}
+                      />
+                    </div>
+                  ) : (
+                    <Select value={targetListId} onValueChange={setTargetListId}>
+                      <SelectTrigger className="w-full bg-slate-50 border-slate-100 h-10 font-bold">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {state.contactLists.map(list => (
+                          <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <Label className="text-xs font-black uppercase tracking-widest text-slate-400">Responsable par défaut</Label>
+                  <Select value={assignedAgentId || "none"} onValueChange={val => setAssignedAgentId(val === "none" ? "" : val)}>
+                    <SelectTrigger className="w-full bg-slate-50 border-slate-100 h-10">
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-700">
+                        <UserIcon className="w-3.5 h-3.5 text-slate-400" />
+                        <SelectValue placeholder="Laisser libre" />
+                      </div>
                     </SelectTrigger>
                     <SelectContent>
-                      {state.contactLists.map(list => (
-                        <SelectItem key={list.id} value={list.id}>{list.name}</SelectItem>
+                      <SelectItem value="none">--- Aucun (Libre) ---</SelectItem>
+                      {state.users.map(u => (
+                        <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                )}
+                  <p className="text-[10px] text-slate-400 font-medium italic mt-1 leading-tight">Tous les contacts importés seront automatiquement assignés à cet agent.</p>
+                </div>
               </div>
 
               <div className="space-y-3">

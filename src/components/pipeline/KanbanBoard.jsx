@@ -20,16 +20,87 @@ import {
 import KanbanColumn from "./KanbanColumn";
 import KanbanCard from "./KanbanCard";
 import CardDetailSheet from "./CardDetailSheet";
+import TaskDialog from "../agenda/TaskDialog";
 import { toast } from "sonner";
 
 import { db } from "@/lib/db";
 
-export default function KanbanBoard({ pipeline }) {
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Button } from "@/components/ui/button";
+
+export default function KanbanBoard({ pipeline, onQuickCreate }) {
   const { state, dispatch, refreshAllData } = useApp();
   const { isAdmin, currentUser } = usePermissions();
   const [activeCard, setActiveCard] = useState(null);
   const [selectedCard, setSelectedCard] = useState(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
+
+  // Won/Lost Reason Logic
+  const [isReasonDialogOpen, setIsReasonDialogOpen] = useState(false);
+  const [reasonText, setReasonText] = useState("");
+  const [pendingMove, setPendingMove] = useState(null);
+  const [isSavingReason, setIsSavingReason] = useState(false);
+
+  const handleCardClick = (card, quickAddTask = false) => {
+    setSelectedCard(card);
+    if (quickAddTask) {
+      setIsTaskDialogOpen(true);
+    } else {
+      setIsSheetOpen(true);
+    }
+  };
+
+  const handleConfirmReason = async () => {
+    if (!pendingMove || !reasonText.trim()) return;
+    setIsSavingReason(true);
+    try {
+      const { activeId, movedCard, overColumn, newOrder, activeColumn } = pendingMove;
+
+      const finalUpdates = { 
+        ...movedCard, 
+        columnId: overColumn.id,
+        order: newOrder,
+        history: [
+          { date: new Date().toISOString(), userId: state.currentUser.id, action: `Marquée comme ${overColumn.name} : ${reasonText.trim()}` },
+          ...(movedCard.history || [])
+        ]
+      };
+
+      const updatedDbCard = await db.updateCard(activeId, finalUpdates);
+
+      // Update local state
+      const updatedPipelines = state.pipelines.map(p => {
+        if (p.id === pipeline.id) {
+          return {
+            ...p,
+            columns: p.columns.map(col => {
+              if (col.id === activeColumn.id) return { ...col, cards: col.cards.filter(c => c.id !== activeId) };
+              if (col.id === overColumn.id) {
+                const newColCards = [...col.cards];
+                newColCards.splice(newOrder, 0, { ...updatedDbCard, columnId: updatedDbCard.columnId, contactId: updatedDbCard.contactId });
+                return { ...col, cards: newColCards };
+              }
+              return col;
+            })
+          };
+        }
+        return p;
+      });
+
+      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+      toast.success(`Affaire marquée comme ${overColumn.name}`);
+      setIsReasonDialogOpen(false);
+      setReasonText("");
+      setPendingMove(null);
+    } catch (error) {
+      toast.error("Erreur lors de la validation");
+    } finally {
+      setIsSavingReason(false);
+    }
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -172,41 +243,37 @@ export default function KanbanBoard({ pipeline }) {
         
         let newOrder = overIndex >= 0 ? overIndex : targetCards.length;
 
-        // Persist to DB
-        const updatedDbCard = await db.updateCard(activeId, { 
-          ...movedCard, 
-          columnId: overColumn.id,
-          order: newOrder 
-        });
+        // Sales Intelligence: Prompt for reason if won/lost
+        const colName = overColumn.name.toLowerCase();
+        const isFinalState = colName.includes("gagné") || colName.includes("perdu") || colName.includes("won") || colName.includes("lost");
 
-        // Update local state with DB response to ensure UI sync
-        const updatedPipelines = state.pipelines.map(p => {
-          if (p.id === pipeline.id) {
-            return {
-              ...p,
-              columns: p.columns.map(col => {
-                if (col.id === activeColumn.id) {
-                  return { ...col, cards: col.cards.filter(c => c.id !== activeId) };
-                }
-                if (col.id === overColumn.id) {
-                  const newColCards = [...col.cards];
-                  // Map DB field names to camelCase for state
-                  const mappedCard = {
-                    ...updatedDbCard,
-                    columnId: updatedDbCard.columnId,
-                    contactId: updatedDbCard.contactId
-                  };
-                  newColCards.splice(newOrder, 0, mappedCard);
-                  return { ...col, cards: newColCards };
-                }
-                return col;
-              })
-            };
-          }
-          return p;
-        });
+        if (isFinalState) {
+          setPendingMove({ activeId, movedCard, overColumn, newOrder, activeColumn });
+          setIsReasonDialogOpen(true);
+        } else {
+          // Standard Move
+          const updatedDbCard = await db.updateCard(activeId, { ...movedCard, columnId: overColumn.id, order: newOrder });
 
-        dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+          const updatedPipelines = state.pipelines.map(p => {
+            if (p.id === pipeline.id) {
+              return {
+                ...p,
+                columns: p.columns.map(col => {
+                  if (col.id === activeColumn.id) return { ...col, cards: col.cards.filter(c => c.id !== activeId) };
+                  if (col.id === overColumn.id) {
+                    const newColCards = [...col.cards];
+                    newColCards.splice(newOrder, 0, { ...updatedDbCard, columnId: updatedDbCard.columnId, contactId: updatedDbCard.contactId });
+                    return { ...col, cards: newColCards };
+                  }
+                  return col;
+                })
+              };
+            }
+            return p;
+          });
+          dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+          toast.success(`Affaire déplacée vers ${overColumn.name}`);
+        }
         toast.success(`Affaire déplacée vers ${overColumn.name}`);
       }
     } catch (error) {
@@ -239,14 +306,12 @@ export default function KanbanBoard({ pipeline }) {
         onDragEnd={handleDragEnd}
       >
         <div className="flex gap-6 h-full min-w-max pb-4">
-          {pipeline.columns.map((column) => (
+          {(pipeline.columns || []).map((column) => (
             <KanbanColumn 
               key={column.id} 
               column={column} 
-              onCardClick={(card) => {
-                setSelectedCard(card);
-                setIsSheetOpen(true);
-              }}
+              onCardClick={handleCardClick}
+              onQuickCreate={onQuickCreate}
             />
           ))}
         </div>
@@ -264,6 +329,53 @@ export default function KanbanBoard({ pipeline }) {
         open={isSheetOpen} 
         onOpenChange={setIsSheetOpen} 
       />
+
+      <TaskDialog 
+        task={null}
+        open={isTaskDialogOpen}
+        onOpenChange={setIsTaskDialogOpen}
+        defaultCardId={selectedCard?.id}
+        defaultContactId={selectedCard?.contactId || selectedCard?.clientId}
+      />
+
+      <Dialog open={isReasonDialogOpen} onOpenChange={(val) => {
+        setIsReasonDialogOpen(val);
+        if (!val) { setReasonText(""); setPendingMove(null); }
+      }}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Target className="w-5 h-5 text-green-600" />
+              Bilan de l'affaire
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-black uppercase tracking-widest text-slate-400">
+                Pourquoi marquer cette affaire comme "{pendingMove?.overColumn.name}" ?
+              </Label>
+              <Textarea 
+                placeholder="Ex: Signature du contrat signée, budget refusé, pas de réponse..."
+                className="min-h-[100px] bg-slate-50 border-slate-100"
+                value={reasonText}
+                onChange={(e) => setReasonText(e.target.value)}
+                autoFocus
+              />
+              <p className="text-[10px] text-slate-400 italic">Ce motif sera conservé dans l'historique permanent de l'affaire.</p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsReasonDialogOpen(false)}>Annuler</Button>
+            <Button 
+              className="bg-green-600 hover:bg-green-700 text-white font-bold" 
+              onClick={handleConfirmReason}
+              disabled={isSavingReason || !reasonText.trim()}
+            >
+              {isSavingReason ? "Validation..." : "Confirmer"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

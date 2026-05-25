@@ -5,9 +5,27 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Plus, Trash2, GripVertical, Settings2 } from "lucide-react";
+import { 
+  Plus, 
+  Trash2, 
+  GripVertical, 
+  Settings2,
+  AlertTriangle,
+  X
+} from "lucide-react";
 import { toast } from "sonner";
 import { Separator } from "@/components/ui/separator";
+import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle, 
+  AlertDialogTrigger 
+} from "@/components/ui/alert-dialog";
 
 export default function EditPipelineDialog({ open, onOpenChange, pipeline }) {
   const { state, dispatch } = useApp();
@@ -121,6 +139,29 @@ export default function EditPipelineDialog({ open, onOpenChange, pipeline }) {
     }
   };
 
+  const handleDeletePipeline = async () => {
+    // Safety check: count total cards in all columns
+    const totalCards = columns.reduce((acc, col) => acc + (col.cards?.length || 0), 0);
+    
+    if (totalCards > 0) {
+      toast.error("Impossible de supprimer un pipeline contenant des affaires actives");
+      return;
+    }
+
+    try {
+      await db.deletePipeline(pipeline.id);
+      
+      const updatedPipelines = state.pipelines.filter(p => p.id !== pipeline.id);
+      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+      
+      toast.success("Pipeline supprimé avec succès");
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Error deleting pipeline:", error);
+      toast.error("Erreur lors de la suppression du pipeline");
+    }
+  };
+
   if (!pipeline) return null;
 
   return (
@@ -177,11 +218,37 @@ export default function EditPipelineDialog({ open, onOpenChange, pipeline }) {
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
-          <Button className="bg-green-600 hover:bg-green-700" onClick={handleSave} disabled={isSaving}>
-            {isSaving ? "Enregistrement..." : "Enregistrer les modifications"}
-          </Button>
+        <DialogFooter className="flex flex-col sm:flex-row gap-3">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" className="text-red-600 border-red-100 hover:bg-red-50 hover:text-red-700">
+                <Trash2 className="w-4 h-4 mr-2" /> Supprimer Pipeline
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle className="flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                  Supprimer le pipeline ?
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  Cette action supprimera définitivement le pipeline <strong>{pipeline.name}</strong> ainsi que toutes ses étapes.<br /><br />
+                  <strong>Attention :</strong> Le pipeline doit être vide d'affaires pour pouvoir être supprimé.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Annuler</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeletePipeline} className="bg-red-600 hover:bg-red-700">Confirmer la suppression</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          
+          <div className="flex-1 flex justify-end gap-3">
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Annuler</Button>
+            <Button className="bg-green-600 hover:bg-green-700" onClick={handleSave} disabled={isSaving}>
+              {isSaving ? "Enregistrement..." : "Enregistrer"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -26,7 +26,7 @@ function AppContent() {
     return <AuthScreen />;
   }
 
-  if (!state.currentUser.is_approved) {
+  if (!state.currentUser.isApproved) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 text-center">
         <div className="bg-amber-100 text-amber-600 p-4 rounded-full mb-6 shadow-sm">

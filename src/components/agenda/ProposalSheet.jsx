@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 
 export default function ProposalSheet({ proposal, open, onOpenChange }) {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, refreshAllData } = useApp();
   const [isRefuseDialogOpen, setIsRefuseDialogOpen] = useState(false);
   const [refusalReason, setRefusalReason] = useState("");
 
@@ -30,69 +30,129 @@ export default function ProposalSheet({ proposal, open, onOpenChange }) {
 
   const prospector = state.users.find(u => u.id === proposal.prospectorId);
   const contact = state.contacts.find(c => c.id === proposal.linkedContactId);
-  const card = state.pipelines.flatMap(p => p.columns.flatMap(col => col.cards)).find(c => c.id === proposal.linkedCardId);
+  const card = (Array.isArray(state.pipelines) ? state.pipelines : []).flatMap(p => (p.columns || []).flatMap(col => (col.cards || []))).find(c => c.id === proposal.linkedCardId);
 
-  const handleAccept = () => {
-    // 1. Update proposal status
-    const updatedProposals = state.rdvProposals.map(p => 
-      p.id === proposal.id ? { ...p, status: "accepted" } : p
-    );
-    
-    // 2. Create actual task
-    const newTask = {
-      id: "t" + Date.now(),
-      userId: proposal.commercialId,
-      title: "🤝 " + proposal.title,
-      type: "meeting",
-      date: format(new Date(proposal.proposedDate), "yyyy-MM-dd"),
-      time: format(new Date(proposal.proposedDate), "HH:mm"),
-      duration: proposal.duration,
-      linkedContactId: proposal.linkedContactId,
-      linkedCardId: proposal.linkedCardId,
-      status: "pending",
-      notes: proposal.notes
-    };
+  const handleAccept = async () => {
+    try {
+      // 1. Update proposal status in DB
+      await db.updateProposal(proposal.id, { ...proposal, status: "accepted" });
+      
+      const updatedProposals = state.rdvProposals.map(p => 
+        p.id === proposal.id ? { ...p, status: "accepted" } : p
+      );
+      
+      // 2. Create actual task using DB helper for robustness
+      const taskData = {
+        assignedTo: proposal.commercialId,
+        title: "🤝 " + proposal.title,
+        type: "meeting",
+        dueDate: new Date(proposal.proposedDate).toISOString(),
+        linkedContactId: proposal.linkedContactId,
+        linkedCardId: proposal.linkedCardId,
+        status: "pending",
+        description: proposal.notes || ""
+      };
 
-    // 3. Create notification for prospector
-    const newNotif = {
-      id: "n" + Date.now(),
-      userId: proposal.prospectorId,
-      type: "rdv_proposal_accepted",
-      message: `${state.currentUser.name} a accepté votre proposition : ${proposal.title}`,
-      relatedId: proposal.id,
-      read: false,
-      createdAt: new Date().toISOString()
-    };
+      const savedTask = await db.insertTask(taskData);
+      
+      // Audit automatique pour l'affaire liée
+      if (proposal.linkedCardId) {
+        const pipeline = (Array.isArray(state.pipelines) ? state.pipelines : []).find(p => p.columns.some(col => col.cards.some(c => c.id === proposal.linkedCardId)));
+        if (pipeline) {
+          const card = pipeline.columns.flatMap(col => col.cards).find(c => c.id === proposal.linkedCardId);
+          if (card) {
+            const historyEntry = {
+              date: new Date().toISOString(),
+              userId: state.currentUser.id,
+              action: `Proposition de RDV acceptée : ${proposal.title}`
+            };
+            const updatedCard = { ...card, history: [historyEntry, ...(card.history || [])] };
+            await db.updateCard(card.id, updatedCard);
+            
+            const updatedPipelinesForHistory = state.pipelines.map(p => p.id === pipeline.id ? {
+              ...p,
+              columns: p.columns.map(col => ({
+                ...col,
+                cards: col.cards.map(c => c.id === card.id ? updatedCard : c)
+              }))
+            } : p);
+            dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelinesForHistory });
+          }
+        }
+      }
+      
+      // 3. Create notification for prospector in DB
+      const newNotifData = {
+        userId: proposal.prospectorId,
+        type: "rdv_proposal_accepted",
+        message: `${state.currentUser.name} a accepté votre proposition : ${proposal.title}`,
+        relatedId: proposal.id,
+        read: false
+      };
 
-    dispatch({ type: "UPDATE_PROPOSALS", payload: updatedProposals });
-    dispatch({ type: "UPDATE_TASKS", payload: [...state.tasks, newTask] });
-    dispatch({ type: "UPDATE_NOTIFICATIONS", payload: [...state.notifications, newNotif] });
-    
-    toast.success("Proposition acceptée et ajoutée à l'agenda");
-    onOpenChange(false);
+      const savedNotif = await db.insertNotification(newNotifData);
+
+      dispatch({ type: "UPDATE_PROPOSALS", payload: updatedProposals });
+      dispatch({ type: "UPDATE_TASKS", payload: [...state.tasks, savedTask] });
+      dispatch({ type: "UPDATE_NOTIFICATIONS", payload: [...state.notifications, savedNotif] });
+      
+      toast.success("Proposition acceptée et ajoutée à l'agenda");
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Error accepting proposal:", error);
+      toast.error("Erreur lors de l'acceptation de la proposition");
+    }
   };
 
-  const handleRefuse = () => {
-    const updatedProposals = state.rdvProposals.map(p => 
-      p.id === proposal.id ? { ...p, status: "refused", refusalReason } : p
-    );
+  const handleRefuse = async () => {
+    try {
+      // Update proposal status in DB
+      await db.updateProposal(proposal.id, { ...proposal, status: "refused", refusalReason });
 
-    const newNotif = {
-      id: "n" + Date.now(),
-      userId: proposal.prospectorId,
-      type: "rdv_proposal_refused",
-      message: `${state.currentUser.name} a refusé votre proposition : ${proposal.title}${refusalReason ? ` (Raison : ${refusalReason})` : ""}`,
-      relatedId: proposal.id,
-      read: false,
-      createdAt: new Date().toISOString()
-    };
+      // Audit automatique pour l'affaire liée
+      if (proposal.linkedCardId) {
+        const pipeline = (Array.isArray(state.pipelines) ? state.pipelines : []).find(p => p.columns.some(col => col.cards.some(c => c.id === proposal.linkedCardId)));
+        if (pipeline) {
+          const card = pipeline.columns.flatMap(col => col.cards).find(c => c.id === proposal.linkedCardId);
+          if (card) {
+            const historyEntry = {
+              date: new Date().toISOString(),
+              userId: state.currentUser.id,
+              action: `Proposition de RDV refusée : ${proposal.title}${refusalReason ? ` (Raison : ${refusalReason})` : ""}`
+            };
+            const updatedCard = { ...card, history: [historyEntry, ...(card.history || [])] };
+            await db.updateCard(card.id, updatedCard);
+            // Refresh to ensure history is updated in state
+            await refreshAllData();
+          }
+        }
+      }
 
-    dispatch({ type: "UPDATE_PROPOSALS", payload: updatedProposals });
-    dispatch({ type: "UPDATE_NOTIFICATIONS", payload: [...state.notifications, newNotif] });
-    
-    toast.error("Proposition refusée");
-    setIsRefuseDialogOpen(false);
-    onOpenChange(false);
+      const updatedProposals = state.rdvProposals.map(p => 
+        p.id === proposal.id ? { ...p, status: "refused", refusalReason } : p
+      );
+
+      // Create notification for prospector in DB
+      const newNotifData = {
+        userId: proposal.prospectorId,
+        type: "rdv_proposal_refused",
+        message: `${state.currentUser.name} a refusé votre proposition : ${proposal.title}${refusalReason ? ` (Raison : ${refusalReason})` : ""}`,
+        relatedId: proposal.id,
+        read: false
+      };
+
+      const savedNotif = await db.insertNotification(newNotifData);
+
+      dispatch({ type: "UPDATE_PROPOSALS", payload: updatedProposals });
+      dispatch({ type: "UPDATE_NOTIFICATIONS", payload: [...state.notifications, savedNotif] });
+      
+      toast.error("Proposition refusée");
+      setIsRefuseDialogOpen(false);
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Error refusing proposal:", error);
+      toast.error("Erreur lors du refus de la proposition");
+    }
   };
 
   return (

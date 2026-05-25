@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from "react";
+import * as XLSX from "xlsx";
 import { useApp } from "@/context/AppContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { db } from "@/lib/db";
@@ -30,6 +31,7 @@ import {
   PlusCircle,
   Folder,
   Trash2,
+  Download,
   ChevronLeft,
   Calendar,
   Clock,
@@ -39,7 +41,8 @@ import {
   Upload,
   Sparkles,
   Loader2,
-  GripVertical
+  GripVertical,
+  AlertTriangle
 } from "lucide-react";
 import { 
   Select, 
@@ -51,10 +54,11 @@ import {
 import ContactSheet from "./ContactSheet";
 import ImportContactsDialog from "./ImportContactsDialog";
 import NewCardDialog from "../pipeline/NewCardDialog";
+import TaskDialog from "../agenda/TaskDialog";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { format } from "date-fns";
+import { format, isToday, isSameDay } from "date-fns";
 import { fr } from "date-fns/locale";
 
 import { 
@@ -184,7 +188,7 @@ function DraggableContactRow({ contact, children, onSelect, isSelected }) {
     <TableRow 
       ref={setNodeRef} 
       style={style}
-      className={`cursor-pointer group transition-colors ${isDragging ? "opacity-50 bg-slate-100 ring-2 ring-green-500 ring-inset" : "hover:bg-slate-50/30"}`}
+      className={`cursor-pointer group transition-colors ${isSelected ? 'bg-green-50/50' : (isDragging ? "opacity-50 bg-slate-100 ring-2 ring-green-500 ring-inset" : "hover:bg-slate-50/30")}`}
       onClick={onSelect}
     >
       <TableCell className="w-10 px-0 pl-3" onClick={e => e.stopPropagation()}>
@@ -202,12 +206,67 @@ const SortIcon = ({ columnKey, sortConfig }) => {
   return sortConfig.direction === "asc" ? <SortAsc className="ml-1 w-3 h-3 text-green-600" /> : <SortDesc className="ml-1 w-3 h-3 text-green-600" />;
 };
 
-export default function ContactsView() {
+export default function ContactsView({ jumpToId, onJumpHandled }) {
   const { state, dispatch } = useApp();
   const { canDeleteContact, isAdmin } = usePermissions();
   
   // State for Lists
   const [activeListId, setActiveListId] = useState("list-default");
+  const [selectedIds, setSelectedIds] = useState([]);
+
+  const handleBulkMove = async (targetListId) => {
+    if (selectedIds.length === 0) return;
+    try {
+      const updates = selectedIds.map(id => db.updateContact(id, { listId: targetListId }));
+      await Promise.all(updates);
+      
+      const updatedContacts = state.contacts.map(c => 
+        selectedIds.includes(c.id) ? { ...c, listId: targetListId } : c
+      );
+      dispatch({ type: "UPDATE_CONTACTS", payload: updatedContacts });
+      setSelectedIds([]);
+      toast.success(`${selectedIds.length} contacts déplacés`);
+    } catch (error) {
+      toast.error("Erreur lors du déplacement en masse");
+    }
+  };
+
+  const handleBulkAssign = async (agentId) => {
+    if (selectedIds.length === 0) return;
+    try {
+      const actualAgentId = agentId === "none" ? null : agentId;
+      const updates = selectedIds.map(id => db.updateContact(id, { assignedAgentId: actualAgentId }));
+      await Promise.all(updates);
+      
+      const updatedContacts = state.contacts.map(c => 
+        selectedIds.includes(c.id) ? { ...c, assignedAgentId: actualAgentId } : c
+      );
+      dispatch({ type: "UPDATE_CONTACTS", payload: updatedContacts });
+      setSelectedIds([]);
+      toast.success(`${selectedIds.length} contacts assignés`);
+    } catch (error) {
+      toast.error("Erreur lors de l'assignation en masse");
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    try {
+      await db.bulkDeleteContacts(selectedIds);
+      dispatch({ type: "UPDATE_CONTACTS", payload: contacts.filter(c => !selectedIds.includes(c.id)) });
+      setSelectedIds([]);
+      toast.success(`${selectedIds.length} contacts supprimés`);
+    } catch (error) {
+      toast.error("Erreur lors de la suppression en masse");
+    }
+  };
+
+  const handleToggleSelect = (id) => {
+    setSelectedIds(prev => 
+      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
+    );
+  };
+
   const [isNewListOpen, setIsNewPipelineOpen] = useState(false);
   const [newListName, setNewListName] = useState("");
   
@@ -216,222 +275,208 @@ export default function ContactsView() {
   const [tagFilter, setTagFilter] = useState("all");
   const [sectorFilter, setSectorFilter] = useState("all");
   const [agentFilter, setAgentFilter] = useState("all");
-  
-  // Sorting State
-  const [sortConfig, setSortConfig] = useState({ key: "lastModified", direction: "desc" });
-  const [isCleaning, setIsCleaning] = useState(false);
-  
-  // Pagination State
+  const [sortConfig, setSortConfig] = useState({ key: "name", direction: "asc" });
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 50;
-  
-  // Editing & UI State
-  const [selectedContact, setSelectedContact] = useState(null);
-  const [activeDraggingContact, setActiveDraggingContact] = useState(null);
+  const itemsPerPage = 20;
+
+  // Dialog State
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isNewCardOpen, setIsNewCardOpen] = useState(false);
+  const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
+  const [selectedContact, setSelectedContact] = useState(null);
+  const [isCleaning, setIsCleaning] = useState(false);
+
+  // Jump to record from global search
+  useEffect(() => {
+    if (jumpToId && state.contacts.length > 0) {
+      const targetContact = state.contacts.find(c => c.id === jumpToId);
+      if (targetContact) {
+        setSelectedContact(targetContact);
+        setActiveListId(targetContact.listId || "list-default");
+        setIsSheetOpen(true);
+        onJumpHandled();
+      }
+    }
+  }, [jumpToId, state.contacts]);
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [tempComment, setTempComment] = useState("");
 
-  const contacts = Array.isArray(state?.contacts) ? state.contacts : [];
-  const contactLists = Array.isArray(state?.contactLists) ? state.contactLists : [];
+  const { contactLists = [], contacts = [] } = state;
+  const sectors = useMemo(() => {
+    const s = new Set(contacts.map(c => c.industry).filter(Boolean));
+    return Array.from(s).sort();
+  }, [contacts]);
 
-  // DnD Sensors
-  const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 5,
-      },
-    })
-  );
-
-  // Reset page when list or filters change
-  useEffect(() => {
-    setCurrentPage(1);
-  }, [activeListId, searchTerm, tagFilter, sectorFilter, agentFilter, sortConfig]);
-
-  // Filter contacts by active list
   const listContacts = useMemo(() => {
     if (activeListId === "list-default") return contacts;
     return contacts.filter(c => c.listId === activeListId);
   }, [contacts, activeListId]);
 
-  // Unique sectors for the current view
-  const sectors = useMemo(() => {
-    const s = new Set();
-    listContacts.forEach(c => { if(c.industry) s.add(c.industry); });
-    return Array.from(s);
-  }, [listContacts]);
-
   const filteredContacts = useMemo(() => {
-    let result = listContacts.filter(contact => {
-      const search = (searchTerm || "").toLowerCase();
-      const fullName = `${contact.firstName || ""} ${contact.lastName || ""}`.toLowerCase();
-      const company = (contact.company || "").toLowerCase();
-      const phone = (contact.phone || "").toLowerCase();
-      
-      const matchesSearch = fullName.includes(search) || company.includes(search) || phone.includes(search);
-      const matchesTag = tagFilter === "all" || (Array.isArray(contact.tags) && contact.tags.includes(tagFilter));
-      const matchesSector = sectorFilter === "all" || contact.industry === sectorFilter;
-      const matchesAgent = agentFilter === "all" || contact.assignedAgentId === agentFilter;
-      
-      return matchesSearch && matchesTag && matchesSector && matchesAgent;
-    });
+    let result = [...listContacts];
 
-    // Apply Sorting
-    if (sortConfig.key) {
-      result.sort((a, b) => {
-        let aVal = a[sortConfig.key] || "";
-        let bVal = b[sortConfig.key] || "";
-
-        if (sortConfig.key === "name") {
-          aVal = `${a.firstName || ""} ${a.lastName || ""}`.toLowerCase();
-          bVal = `${b.firstName || ""} ${b.lastName || ""}`.toLowerCase();
-        } else if (typeof aVal === 'string') {
-          aVal = aVal.toLowerCase();
-          bVal = bVal.toLowerCase();
-        }
-
-        if (aVal < bVal) return sortConfig.direction === "asc" ? -1 : 1;
-        if (aVal > bVal) return sortConfig.direction === "asc" ? 1 : -1;
-        return 0;
-      });
+    if (searchTerm) {
+      const lowTerm = searchTerm.toLowerCase();
+      result = result.filter(c => 
+        `${c.firstName} ${c.lastName}`.toLowerCase().includes(lowTerm) ||
+        (c.company || "").toLowerCase().includes(lowTerm) ||
+        (c.email || "").toLowerCase().includes(lowTerm)
+      );
     }
 
+    if (tagFilter !== "all") {
+      result = result.filter(c => c.tags?.includes(tagFilter));
+    }
+
+    if (sectorFilter !== "all") {
+      result = result.filter(c => c.industry === sectorFilter);
+    }
+
+    if (agentFilter !== "all") {
+      result = result.filter(c => c.assignedAgentId === agentFilter);
+    }
+
+    result.sort((a, b) => {
+      let valA, valB;
+      if (sortConfig.key === "name") {
+        valA = `${a.lastName} ${a.firstName}`.toLowerCase();
+        valB = `${b.lastName} ${b.firstName}`.toLowerCase();
+      } else if (sortConfig.key === "lastInteraction") {
+        const getTimestamp = (contact) => {
+          const dates = [
+            ...(contact.interactions || []).map(i => new Date(i.date).getTime()),
+            ...(state.tasks || []).filter(t => (t.linkedContactId === contact.id || t.contactId === contact.id) && t.status === "done").map(t => new Date(t.date).getTime())
+          ].filter(d => !isNaN(d));
+          return dates.length > 0 ? Math.max(...dates) : 0;
+        };
+        valA = getTimestamp(a);
+        valB = getTimestamp(b);
+      } else if (sortConfig.key === "nextAction") {
+        const getTimestamp = (contactId) => {
+          const dates = (state.tasks || [])
+            .filter(t => (t.linkedContactId === contactId || t.contactId === contactId) && t.status !== "done")
+            .map(t => new Date(t.date).getTime())
+            .filter(d => !isNaN(d));
+          return dates.length > 0 ? Math.min(...dates) : Infinity;
+        };
+        valA = getTimestamp(a.id);
+        valB = getTimestamp(b.id);
+      } else {
+        valA = a[sortConfig.key] || "";
+        valB = b[sortConfig.key] || "";
+      }
+      
+      if (valA < valB) return sortConfig.direction === "asc" ? -1 : 1;
+      if (valA > valB) return sortConfig.direction === "asc" ? 1 : -1;
+      return 0;
+    });
+
     return result;
-  }, [listContacts, searchTerm, tagFilter, sectorFilter, agentFilter, sortConfig]);
+  }, [listContacts, searchTerm, tagFilter, sectorFilter, agentFilter, sortConfig, state.tasks]);
 
-  const paginatedContacts = useMemo(() => {
-    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
-    return filteredContacts.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-  }, [filteredContacts, currentPage]);
+  const totalPages = Math.ceil(filteredContacts.length / itemsPerPage);
+  const paginatedContacts = filteredContacts.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
 
-  const totalPages = Math.ceil(filteredContacts.length / ITEMS_PER_PAGE);
+  const handleToggleSelectAll = () => {
+    if (paginatedContacts.length > 0 && selectedIds.length === paginatedContacts.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(paginatedContacts.map(c => c.id));
+    }
+  };
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  const handleDragStart = (event) => {
+    // Logic if needed
+  };
+
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const contactId = active.id;
+    const targetListId = over.id;
+
+    if (active.data.current.listId === targetListId) return;
+
+    try {
+      await db.updateContact(contactId, { listId: targetListId });
+      const updated = contacts.map(c => c.id === contactId ? { ...c, listId: targetListId } : c);
+      dispatch({ type: "UPDATE_CONTACTS", payload: updated });
+      toast.success("Contact déplacé");
+    } catch (error) {
+      toast.error("Erreur lors du déplacement");
+    }
+  };
+
+  const handleCreateList = async () => {
+    if (!newListName.trim()) return;
+    try {
+      const newList = await db.insertContactList({
+        name: newListName,
+        createdBy: state.currentUser.id
+      });
+      dispatch({ type: "UPDATE_CONTACT_LISTS", payload: [...contactLists, newList] });
+      setNewListName("");
+      setIsNewPipelineOpen(false);
+      toast.success("Liste créée");
+    } catch (error) {
+      toast.error("Erreur lors de la création de la liste");
+    }
+  };
+
+  const handleDeleteList = async (id) => {
+    try {
+      await db.deleteContactList(id);
+      dispatch({ type: "UPDATE_CONTACT_LISTS", payload: contactLists.filter(l => l.id !== id) });
+      dispatch({ type: "UPDATE_CONTACTS", payload: contacts.filter(c => c.listId !== id) });
+      if (activeListId === id) setActiveListId("list-default");
+      toast.success("Liste supprimée");
+    } catch (error) {
+      toast.error("Erreur lors de la suppression");
+    }
+  };
+
+  const handleCleanupDuplicates = async () => {
+    setIsCleaning(true);
+    try {
+      const seen = new Set();
+      const toDelete = [];
+      const kept = [];
+
+      contacts.forEach(c => {
+        const key = `${c.company}-${c.lastName}-${c.email}`.toLowerCase();
+        if (seen.has(key)) toDelete.push(c.id);
+        else {
+          seen.add(key);
+          kept.push(c);
+        }
+      });
+
+      if (toDelete.length > 0) {
+        await Promise.all(toDelete.map(id => db.deleteContact(id)));
+        dispatch({ type: "UPDATE_CONTACTS", payload: kept });
+        toast.success(`${toDelete.length} doublons supprimés`);
+      } else {
+        toast.info("Aucun doublon trouvé");
+      }
+    } catch (error) {
+      toast.error("Erreur lors du nettoyage");
+    } finally {
+      setIsCleaning(false);
+    }
+  };
 
   const handleSort = (key) => {
     setSortConfig(prev => ({
       key,
       direction: prev.key === key && prev.direction === "asc" ? "desc" : "asc"
     }));
-  };
-
-  const handleCreateList = async () => {
-    if (!newListName) return;
-    try {
-      const newListData = {
-        name: newListName,
-        color: "#16a34a",
-        icon: "folder"
-      };
-      const savedList = await db.insertContactList(newListData);
-      dispatch({ type: "UPDATE_CONTACT_LISTS", payload: [...contactLists, savedList] });
-      setActiveListId(savedList.id);
-      setIsNewPipelineOpen(false);
-      setNewListName("");
-      toast.success("Nouveau répertoire créé");
-    } catch (error) {
-      toast.error("Erreur lors de la création du répertoire");
-    }
-  };
-
-  const handleDeleteList = async (listId) => {
-    if (listId === "list-default") {
-      toast.error("Impossible de supprimer le répertoire par défaut");
-      return;
-    }
-    try {
-      await db.deleteContactList(listId);
-      const updatedLists = contactLists.filter(l => l.id !== listId);
-      const updatedContacts = contacts.filter(c => c.listId !== listId);
-      dispatch({ type: "UPDATE_CONTACT_LISTS", payload: updatedLists });
-      dispatch({ type: "UPDATE_CONTACTS", payload: updatedContacts });
-      setActiveListId("list-default");
-      toast.info("Répertoire supprimé avec succès");
-    } catch (error) {
-      toast.error("Erreur lors de la suppression du répertoire");
-    }
-  };
-
-  const handleDragStart = (event) => {
-    setActiveDraggingContact(event.active.data.current);
-  };
-
-  const handleDragEnd = async (event) => {
-    const { active, over } = event;
-    setActiveDraggingContact(null);
-
-    if (!over) return;
-
-    const contactId = active.id;
-    const targetListId = over.id;
-    const contact = active.data.current;
-
-    if (!contact || contact.listId === targetListId) return;
-
-    try {
-      // If target is list-default, we set listId to null (unclassified)
-      const newListId = targetListId === "list-default" ? null : targetListId;
-      
-      const updatedContact = await db.updateContact(contactId, { ...contact, listId: newListId });
-      dispatch({ 
-        type: "UPDATE_CONTACTS", 
-        payload: contacts.map(c => c.id === contactId ? updatedContact : c) 
-      });
-      
-      if (targetListId === "list-default") {
-        toast.success("Contact retiré du répertoire");
-      } else {
-        const listName = contactLists.find(l => l.id === targetListId)?.name;
-        toast.success(`Contact déplacé vers ${listName}`);
-      }
-    } catch (error) {
-      toast.error("Erreur lors du déplacement");
-    }
-  };
-
-  const handleCleanupDuplicates = async () => {
-    const contactsWithSiret = contacts.filter(c => c.siret && c.siret.trim() !== "");
-    const groupedBySiret = {};
-    
-    contactsWithSiret.forEach(c => {
-      const s = c.siret.trim();
-      if (!groupedBySiret[s]) groupedBySiret[s] = [];
-      groupedBySiret[s].push(c);
-    });
-
-    const idsToDelete = [];
-    Object.values(groupedBySiret).forEach(group => {
-      if (group.length > 1) {
-        // Sort by creation date, oldest first
-        const sorted = group.sort((a, b) => new Date(a.createdAt || a.lastModified) - new Date(b.createdAt || b.lastModified));
-        // Keep the first (oldest), delete the rest
-        const duplicates = sorted.slice(1);
-        duplicates.forEach(d => idsToDelete.push(d.id));
-      }
-    });
-
-    if (idsToDelete.length === 0) {
-      toast.info("Aucun doublon détecté (basé sur le SIRET)");
-      return;
-    }
-
-    if (!confirm(`Le système a détecté ${idsToDelete.length} doublons. Voulez-vous les supprimer ? La version la plus ANCIENNE de chaque contact sera conservée.`)) {
-      return;
-    }
-
-    setIsCleaning(true);
-    try {
-      await db.bulkDeleteContacts(idsToDelete);
-      const updatedContacts = contacts.filter(c => !idsToDelete.includes(c.id));
-      dispatch({ type: "UPDATE_CONTACTS", payload: updatedContacts });
-      toast.success(`${idsToDelete.length} doublons supprimés avec succès`);
-    } catch (error) {
-      console.error("Cleanup error:", error);
-      toast.error(`Erreur lors du nettoyage : ${error.message || "Problème de connexion"}`);
-    } finally {
-      setIsCleaning(false);
-    }
   };
 
   const startEditingComment = (e, contact) => {
@@ -441,14 +486,12 @@ export default function ContactsView() {
   };
 
   const saveComment = async (contactId) => {
+    if (editingCommentId !== contactId) return;
     try {
       const contact = contacts.find(c => c.id === contactId);
-      if (!contact) return;
-      
-      const updatedContact = await db.updateContact(contactId, { ...contact, notes: tempComment });
-      const updated = contacts.map(c => 
-        c.id === contactId ? updatedContact : c
-      );
+      const updatedContact = { ...contact, notes: tempComment };
+      await db.updateContact(contactId, updatedContact);
+      const updated = contacts.map(c => c.id === contactId ? updatedContact : c);
       dispatch({ type: "UPDATE_CONTACTS", payload: updated });
       setEditingCommentId(null);
     } catch (error) {
@@ -456,10 +499,47 @@ export default function ContactsView() {
     }
   };
 
+  const handleExportExcel = () => {
+    try {
+      const dataToExport = filteredContacts.map(c => {
+        const agent = state.users.find(u => u.id === c.assignedAgentId);
+        return {
+          Prénom: c.firstName,
+          Nom: c.lastName,
+          Société: c.company,
+          Email: c.email,
+          Téléphone: c.phone,
+          SIRET: c.siret,
+          CP: c.postalCode,
+          Secteur: c.industry,
+          Tags: (c.tags || []).join(", "),
+          Agent: agent?.name || "Libre",
+          "Dernière Modification": c.lastModified ? format(new Date(c.lastModified), "dd/MM/yyyy HH:mm") : "-"
+        };
+      });
+
+      const worksheet = XLSX.utils.json_to_sheet(dataToExport);
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Contacts");
+      const fileName = `crm-contacts-${currentList.name.toLowerCase().replace(/\s+/g, "-")}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      toast.success("Fichier Excel généré avec succès");
+    } catch (error) {
+      console.error("Excel export error:", error);
+      toast.error("Erreur lors de l'exportation Excel");
+    }
+  };
+
   const handleCreateDealForContact = (e, contact) => {
     e.stopPropagation();
     setSelectedContact(contact);
     setIsNewCardOpen(true);
+  };
+
+  const handleCreateTaskForContact = (e, contact) => {
+    e.stopPropagation();
+    setSelectedContact(contact);
+    setIsTaskDialogOpen(true);
   };
 
   const getTagBadgeColor = (tag) => {
@@ -471,25 +551,72 @@ export default function ContactsView() {
     }
   };
 
-  const currentList = contactLists.find(l => l.id === activeListId) || (activeListId === "list-default" ? { name: "Tous les contacts" } : contactLists[0]);
-
-  const dropAnimation = {
-    sideEffects: defaultDropAnimationSideEffects({
-      styles: {
-        active: {
-          opacity: "0.5",
-        },
-      },
-    }),
+  const handleDeleteContact = async (contactId) => {
+    try {
+      await db.deleteContact(contactId);
+      dispatch({ type: "UPDATE_CONTACTS", payload: contacts.filter(c => c.id !== contactId) });
+      toast.success("Contact supprimé avec succès");
+    } catch (error) {
+      console.error("Error deleting contact:", error);
+      toast.error("Erreur lors de la suppression du contact");
+    }
   };
 
+  const currentList = contactLists.find(l => l.id === activeListId) || (activeListId === "list-default" ? { name: "Tous les contacts" } : contactLists[0]);
+  const today = new Date();
+
+  const LastInteraction = ({ contact }) => {
+    const lastDate = useMemo(() => {
+      // 1. Get dates from interactions
+      const interactionDates = (contact.interactions || []).map(i => new Date(i.date).getTime());
+      
+      // 2. Get dates from completed tasks
+      const taskDates = (state.tasks || [])
+        .filter(t => (t.linkedContactId === contact.id || t.contactId === contact.id) && t.status === "done")
+        .map(t => new Date(t.date).getTime());
+
+      const allDates = [...interactionDates, ...taskDates].filter(d => !isNaN(d));
+      if (allDates.length === 0) return null;
+      
+      return new Date(Math.max(...allDates));
+    }, [contact.interactions, state.tasks, contact.id]);
+
+    if (!lastDate) return <span className="text-[10px] text-slate-300 italic">Jamais</span>;
+
+    return (
+      <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+        <History className="w-3 h-3 text-slate-300" />
+        <span>{format(lastDate, "dd MMM", { locale: fr })}</span>
+      </div>
+    );
+  };
+
+  const NextAction = ({ contactId }) => {
+    const nextTask = useMemo(() => {
+      const contactTasks = (state.tasks || []).filter(t => (t.linkedContactId === contactId || t.contactId === contactId) && t.status !== "done");
+      if (contactTasks.length === 0) return null;
+      return [...contactTasks].sort((a, b) => new Date(a.date) - new Date(b.date))[0];
+    }, [state.tasks, contactId]);
+
+    if (!nextTask) return <span className="text-[10px] text-slate-300 italic">Aucune</span>;
+
+    const taskDate = new Date(nextTask.date);
+    const isLate = taskDate < today && !isToday(taskDate);
+    const isDueToday = isToday(taskDate);
+
+    return (
+      <div className={`flex items-center gap-1.5 text-[11px] font-bold ${isLate ? 'text-red-500' : isDueToday ? 'text-orange-500' : 'text-green-600'}`}>
+        {isLate ? <AlertTriangle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+        <span>{format(taskDate, "dd MMM", { locale: fr })}</span>
+      </div>
+    );
+  };
+
+  const dropAnimation = { sideEffects: defaultDropAnimationSideEffects({ styles: { active: { opacity: "0.5" } } }) };
+
   return (
-    <DndContext 
-      sensors={sensors} 
-      onDragStart={handleDragStart} 
-      onDragEnd={handleDragEnd}
-    >
-      <div className="flex h-full gap-6">
+    <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+      <div className="flex h-full gap-6 p-6 overflow-hidden">
         {/* Sidebar */}
         <div className="w-64 shrink-0 flex flex-col gap-6">
           <div className="bg-white rounded-2xl border shadow-sm p-4 space-y-4">
@@ -499,27 +626,17 @@ export default function ContactsView() {
                 <PlusCircle className="w-4 h-4" />
               </Button>
             </div>
-            
             <div className="space-y-1">
-              <DroppableAllContacts 
-                activeListId={activeListId} 
-                onClick={setActiveListId} 
-              />
-              
+              <DroppableAllContacts activeListId={activeListId} onClick={setActiveListId} />
               {contactLists.map(list => (
                 <DroppableFolder 
-                  key={list.id}
-                  list={list}
-                  activeListId={activeListId}
-                  onClick={setActiveListId}
-                  onDelete={handleDeleteList}
-                  isAdmin={isAdmin}
+                  key={list.id} list={list} activeListId={activeListId} 
+                  onClick={setActiveListId} onDelete={handleDeleteList} isAdmin={isAdmin}
                   contactsCount={contacts.filter(c => c.listId === list.id).length}
                 />
               ))}
             </div>
           </div>
-
           <div className="bg-green-600 rounded-2xl p-6 text-white shadow-xl shadow-green-100 relative overflow-hidden">
             <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-80 text-white">Total Contacts</p>
             <h4 className="text-3xl font-black mt-1 text-white">{contacts.length}</h4>
@@ -528,8 +645,8 @@ export default function ContactsView() {
         </div>
 
         {/* Main Content */}
-        <div className="flex-1 space-y-6 min-w-0">
-          <div className="flex justify-between items-end bg-white p-6 rounded-2xl border shadow-sm">
+        <div className="flex-1 space-y-6 min-w-0 flex flex-col overflow-hidden">
+          <div className="flex justify-between items-end bg-white p-6 rounded-2xl border shadow-sm shrink-0">
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <Badge variant="outline" className="bg-green-50 text-green-700 border-green-100 py-0 text-[10px] font-black uppercase">Vue Active</Badge>
@@ -539,40 +656,31 @@ export default function ContactsView() {
             </div>
             <div className="flex items-center gap-3">
               {isAdmin && (
-                <Button 
-                  variant="outline" 
-                  onClick={handleCleanupDuplicates} 
-                  disabled={isCleaning}
-                  className="border-amber-200 text-amber-700 hover:bg-amber-50"
-                >
+                <Button variant="outline" onClick={handleCleanupDuplicates} disabled={isCleaning} className="border-amber-200 text-amber-700 hover:bg-amber-50">
                   {isCleaning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
                   Nettoyer les doublons
                 </Button>
               )}
+              <Button variant="outline" onClick={handleExportExcel} className="border-slate-200 text-slate-600 hover:bg-slate-50">
+                <Download className="w-4 h-4 mr-2" /> Exporter Excel
+              </Button>
               <Button variant="outline" onClick={() => setIsImportOpen(true)} className="border-slate-200 text-slate-600 hover:bg-slate-50">
                 <Upload className="w-4 h-4 mr-2" /> Importer
               </Button>
-              <Button onClick={() => { setSelectedContact(null); setIsSheetOpen(true); }} className="bg-green-600 hover:bg-green-700 shadow-lg shadow-green-100 px-6 text-white">
+              <Button onClick={() => { setSelectedContact(null); setIsSheetOpen(true); }} className="bg-green-600 hover:bg-green-700 shadow-lg shadow-green-100 px-6 text-white font-bold">
                 <Plus className="w-4 h-4 mr-2" /> Nouveau Contact
               </Button>
             </div>
           </div>
 
-          <div className="bg-white p-4 rounded-2xl border shadow-sm space-y-4">
+          <div className="bg-white p-4 rounded-2xl border shadow-sm space-y-4 shrink-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-              <Input 
-                placeholder={`Rechercher...`} 
-                className="pl-10 border-slate-100 bg-slate-50/50" 
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-              />
+              <Input placeholder={`Rechercher un nom, entreprise ou email...`} className="pl-10 border-slate-100 bg-slate-50/50" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
             </div>
             <div className="flex flex-wrap gap-3">
               <Select value={tagFilter} onValueChange={setTagFilter}>
-                <SelectTrigger className="w-[140px] h-9 text-xs border-slate-100 bg-slate-50/50">
-                  <SelectValue placeholder="Catégorie" />
-                </SelectTrigger>
+                <SelectTrigger className="w-[140px] h-9 text-xs border-slate-100 bg-slate-50/50"><SelectValue placeholder="Catégorie" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Toutes Catégories</SelectItem>
                   <SelectItem value="client">Clients</SelectItem>
@@ -580,229 +688,211 @@ export default function ContactsView() {
                   <SelectItem value="partenaire">Partenaires</SelectItem>
                 </SelectContent>
               </Select>
-
               <Select value={sectorFilter} onValueChange={setSectorFilter}>
-                <SelectTrigger className="w-[140px] h-9 text-xs border-slate-100 bg-slate-50/50">
-                  <SelectValue placeholder="Secteur" />
-                </SelectTrigger>
+                <SelectTrigger className="w-[140px] h-9 text-xs border-slate-100 bg-slate-50/50"><SelectValue placeholder="Secteur" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous Secteurs</SelectItem>
                   {sectors.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
-
               <Select value={agentFilter} onValueChange={setAgentFilter}>
-                <SelectTrigger className="w-[140px] h-9 text-xs border-slate-100 bg-slate-50/50">
-                  <SelectValue placeholder="Agent" />
-                </SelectTrigger>
+                <SelectTrigger className="w-[140px] h-9 text-xs border-slate-100 bg-slate-50/50"><SelectValue placeholder="Agent" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Tous les Agents</SelectItem>
                   {(state?.users || []).map(u => <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>)}
                 </SelectContent>
               </Select>
-              
-              {(tagFilter !== "all" || sectorFilter !== "all" || agentFilter !== "all" || searchTerm) && (
-                <Button variant="ghost" size="sm" className="text-[10px] text-slate-400 uppercase font-bold" onClick={() => {
-                  setSearchTerm("");
-                  setTagFilter("all");
-                  setSectorFilter("all");
-                  setAgentFilter("all");
-                }}>
-                  Effacer filtres
-                </Button>
-              )}
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow className="bg-slate-50/50">
-                  <TableHead className="w-10"></TableHead>
-                  <TableHead onClick={() => handleSort("name")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
-                    <div className="flex items-center">Nom <SortIcon columnKey="name" sortConfig={sortConfig} /></div>
-                  </TableHead>
-                  <TableHead onClick={() => handleSort("company")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
-                    <div className="flex items-center">Entreprise <SortIcon columnKey="company" sortConfig={sortConfig} /></div>
-                  </TableHead>
-                  <TableHead className="font-bold text-slate-900 text-xs">SIRET</TableHead>
-                  <TableHead className="font-bold text-slate-900 text-xs">CP</TableHead>
-                  <TableHead onClick={() => handleSort("industry")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
-                    <div className="flex items-center">Secteur <SortIcon columnKey="industry" sortConfig={sortConfig} /></div>
-                  </TableHead>
-                  <TableHead className="font-bold text-slate-900 text-xs">Téléphone</TableHead>
-                  <TableHead className="font-bold text-slate-900 text-xs">Email</TableHead>
-                  <TableHead onClick={() => handleSort("lastModified")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
-                    <div className="flex items-center">Modifié <SortIcon columnKey="lastModified" sortConfig={sortConfig} /></div>
-                  </TableHead>
-                  <TableHead className="font-bold text-slate-900 text-xs">Agent</TableHead>
-                  <TableHead className="font-bold text-slate-900 w-[200px] text-xs">Commentaires</TableHead>
-                  <TableHead className="text-right"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {paginatedContacts.length === 0 ? (
+          <div className="bg-white rounded-2xl border shadow-sm overflow-hidden flex flex-col flex-1">
+            {/* Bulk Action Bar */}
+            {selectedIds.length > 0 && (
+              <div className="bg-green-50 border-b border-green-100 px-6 py-2 flex items-center justify-between animate-in slide-in-from-top-2 z-20">
+                <div className="flex items-center gap-4">
+                  <span className="text-xs font-bold text-green-700">{selectedIds.length} contact(s) sélectionnés</span>
+                  <Button variant="ghost" size="sm" onClick={() => setSelectedIds([])} className="h-7 text-[10px] text-green-600 hover:bg-green-100 font-bold uppercase tracking-wider">Annuler</Button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-8 border-red-200 text-red-600 hover:bg-red-50 font-bold shadow-sm">
+                        <Trash2 className="w-3.5 h-3.5 mr-2" />
+                        Supprimer
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Supprimer {selectedIds.length} contact(s) ?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Cette action est irréversible. Toutes les données associées à ces contacts seront définitivement supprimées.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Annuler</AlertDialogCancel>
+                        <AlertDialogAction onClick={handleBulkDelete} className="bg-red-600 hover:bg-red-700">Confirmer la suppression</AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+
+                  <div className="h-4 w-[1px] bg-green-200 mx-1" />
+
+                  <Select onValueChange={handleBulkAssign}>
+                    <SelectTrigger className="h-8 w-[160px] text-[11px] bg-white border-blue-200 text-blue-700 font-bold shadow-sm">
+                      <UserIcon className="w-3.5 h-3.5 mr-2" />
+                      <SelectValue placeholder="Assigner à..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none" className="italic text-slate-400">--- Libre ---</SelectItem>
+                      {state.users.map(u => (
+                        <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select onValueChange={handleBulkMove}>
+                    <SelectTrigger className="h-8 w-[180px] text-[11px] bg-white border-green-200 text-green-700 font-bold shadow-sm">
+                      <FolderOpen className="w-3.5 h-3.5 mr-2" />
+                      <SelectValue placeholder="Déplacer vers..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="list-default">Tous les contacts</SelectItem>
+                      {contactLists.map(l => (
+                        <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-auto">
+              <Table>
+                <TableHeader className="bg-slate-50/50 sticky top-0 z-10 shadow-sm">
                   <TableRow>
-                    <TableCell colSpan={11} className="h-40 text-center text-slate-400 italic text-sm">Aucun résultat</TableCell>
+                    <TableHead className="w-10 pl-3">
+                      <input 
+                        type="checkbox"
+                        className="w-4 h-4 rounded border-slate-300 text-green-600 focus:ring-green-500 accent-green-600 cursor-pointer"
+                        checked={paginatedContacts.length > 0 && selectedIds.length === paginatedContacts.length} 
+                        onChange={handleToggleSelectAll} 
+                      />
+                    </TableHead>
+                    <TableHead className="w-10"></TableHead>
+                    <TableHead onClick={() => handleSort("name")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
+                      <div className="flex items-center">Nom <SortIcon columnKey="name" sortConfig={sortConfig} /></div>
+                    </TableHead>
+                    <TableHead onClick={() => handleSort("company")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
+                      <div className="flex items-center">Entreprise <SortIcon columnKey="company" sortConfig={sortConfig} /></div>
+                    </TableHead>
+                    <TableHead className="font-bold text-slate-900 text-xs">SIRET</TableHead>
+                    <TableHead onClick={() => handleSort("industry")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
+                      <div className="flex items-center">Secteur <SortIcon columnKey="industry" sortConfig={sortConfig} /></div>
+                    </TableHead>
+                    <TableHead className="font-bold text-slate-900 text-xs">Téléphone</TableHead>
+                    <TableHead className="font-bold text-slate-900 text-xs">Agent</TableHead>
+                    <TableHead onClick={() => handleSort("lastInteraction")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
+                      <div className="flex items-center">Dernière Relance <SortIcon columnKey="lastInteraction" sortConfig={sortConfig} /></div>
+                    </TableHead>
+                    <TableHead onClick={() => handleSort("nextAction")} className="font-bold text-slate-900 text-xs cursor-pointer hover:bg-slate-100/50 transition-colors">
+                      <div className="flex items-center">Prochaine Action <SortIcon columnKey="nextAction" sortConfig={sortConfig} /></div>
+                    </TableHead>
+                    <TableHead className="font-bold text-slate-900 w-[200px] text-xs">Notes</TableHead>                    <TableHead className="text-right"></TableHead>
                   </TableRow>
-                ) : (
-                  paginatedContacts.map((contact) => {
-                    const agent = state?.users?.find(u => u.id === contact.assignedAgentId);
-                    return (
-                      <DraggableContactRow 
-                        key={contact.id} 
-                        contact={contact}
-                        onSelect={() => { setSelectedContact(contact); setIsSheetOpen(true); }}
-                      >
-                        <TableCell className="font-black text-slate-800 py-4 text-xs">
-                          {contact.firstName} {contact.lastName}
-                        </TableCell>
-                        <TableCell className="text-slate-600 font-medium text-xs">
-                          {contact.company || "-"}
-                        </TableCell>
-                        <TableCell className="text-slate-500 text-[10px] font-mono">
-                          {contact.siret || "-"}
-                        </TableCell>
-                        <TableCell className="text-slate-500 text-[10px] font-bold">
-                          {contact.postalCode || "-"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="text-[9px] uppercase font-bold bg-slate-50 border-slate-100">
-                            {contact.industry || "-"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-xs text-slate-600 font-bold whitespace-nowrap">
-                          {contact.phone || "-"}
-                        </TableCell>
-                        <TableCell className="text-[11px] text-blue-600 font-medium truncate max-w-[120px]">
-                          {contact.email || "-"}
-                        </TableCell>
-                        <TableCell className="text-[10px] text-slate-400 whitespace-nowrap">
-                          {contact.lastModified ? format(new Date(contact.lastModified), "dd/MM HH:mm") : "-"}
-                        </TableCell>
-                        <TableCell>
-                          {agent ? (
-                            <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 rounded-full border shadow-sm" style={{ backgroundColor: agent.color || "#ccc" }} />
-                              <span className="text-[11px] font-bold text-slate-700">{agent.name}</span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-300 text-[10px] italic">Libre</span>
-                          )}
-                        </TableCell>
-                        <TableCell onClick={e => e.stopPropagation()}>
-                          {editingCommentId === contact.id ? (
-                            <div className="flex items-center gap-2">
-                              <Input 
-                                autoFocus
-                                className="h-8 text-[11px] border-green-300"
-                                value={tempComment}
-                                onChange={e => setTempComment(e.target.value)}
-                                onKeyDown={e => e.key === 'Enter' && saveComment(contact.id)}
-                                onBlur={() => saveComment(contact.id)}
-                              />
-                            </div>
-                          ) : (
-                            <div 
-                              className="text-[11px] text-slate-500 line-clamp-1 italic hover:bg-slate-100 p-1 rounded cursor-text"
-                              onClick={(e) => startEditingComment(e, contact)}
-                            >
-                              {contact.notes || "Note..."}
-                            </div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-right" onClick={e => e.stopPropagation()}>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity">
-                                <MoreVertical className="w-4 h-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem onClick={() => { setSelectedContact(contact); setIsSheetOpen(true); }}>
-                                Détails / Modifier
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={(e) => handleCreateDealForContact(e, contact)} className="text-green-600 font-bold">
-                                <Briefcase className="w-4 h-4 mr-2" /> Créer une Affaire
-                              </DropdownMenuItem>
-                              {isAdmin && (
-                                <AlertDialog>
-                                  <AlertDialogTrigger asChild>
-                                    <DropdownMenuItem className="text-red-600" onSelect={(e) => e.preventDefault()}>
-                                      <Trash2 className="w-4 h-4 mr-2" /> Supprimer
-                                    </DropdownMenuItem>
-                                  </AlertDialogTrigger>
-                                  <AlertDialogContent>
-                                    <AlertDialogHeader>
-                                      <AlertDialogTitle>Supprimer le contact ?</AlertDialogTitle>
-                                      <AlertDialogDescription>
-                                        Voulez-vous vraiment supprimer <strong>{contact.firstName} {contact.lastName}</strong> ?
-                                      </AlertDialogDescription>
-                                    </AlertDialogHeader>
-                                    <AlertDialogFooter>
-                                      <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                      <AlertDialogAction onClick={() => dispatch({ type: "UPDATE_CONTACTS", payload: contacts.filter(c => c.id !== contact.id) })} className="bg-red-600">Supprimer</AlertDialogAction>
-                                    </AlertDialogFooter>
-                                  </AlertDialogContent>
-                                </AlertDialog>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </TableCell>
-                      </DraggableContactRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="flex items-center justify-between bg-white p-4 rounded-2xl border shadow-sm">
-              <div className="text-xs text-slate-500 font-medium">
-                Affichage de <span className="font-bold text-slate-900">{((currentPage - 1) * ITEMS_PER_PAGE) + 1}</span> à <span className="font-bold text-slate-900">{Math.min(currentPage * ITEMS_PER_PAGE, filteredContacts.length)}</span> sur <span className="font-bold text-slate-900">{filteredContacts.length}</span>
-              </div>
-              <div className="flex items-center gap-4">
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="h-8 flex gap-2" 
-                  disabled={currentPage === 1}
-                  onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                >
-                  <ChevronLeft className="w-4 h-4" /> Précédent
-                </Button>
-                <span className="text-xs font-bold text-slate-600 tracking-widest uppercase">Page {currentPage} / {totalPages}</span>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
-                  className="h-8 flex gap-2" 
-                  disabled={currentPage === totalPages}
-                  onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                >
-                  Suivant <ChevronRight className="w-4 h-4" />
-                </Button>
-              </div>
+                </TableHeader>
+                <TableBody>
+                  {paginatedContacts.length === 0 ? (
+                    <TableRow><TableCell colSpan={14} className="h-40 text-center text-slate-400 italic text-sm">Aucun résultat</TableCell></TableRow>
+                  ) : (
+                    paginatedContacts.map((contact) => {
+                      const agent = state?.users?.find(u => u.id === contact.assignedAgentId);
+                      return (
+                        <DraggableContactRow key={contact.id} contact={contact} isSelected={selectedIds.includes(contact.id)} onSelect={() => { setSelectedContact(contact); setIsSheetOpen(true); }}>
+                          <TableCell onClick={e => e.stopPropagation()} className="pl-3">
+                            <input 
+                              type="checkbox"
+                              className="w-4 h-4 rounded border-slate-300 text-green-600 focus:ring-green-500 accent-green-600 cursor-pointer"
+                              checked={selectedIds.includes(contact.id)} 
+                              onChange={() => handleToggleSelect(contact.id)} 
+                            />
+                          </TableCell>
+                          <TableCell className="font-black text-slate-800 py-4 text-xs">{contact.firstName} {contact.lastName}</TableCell>
+                          <TableCell className="text-slate-600 font-medium text-xs">{contact.company || "-"}</TableCell>
+                          <TableCell className="text-slate-500 text-[10px] font-mono">{contact.siret || "-"}</TableCell>
+                          <TableCell><Badge variant="outline" className="text-[9px] uppercase font-bold bg-slate-50 border-slate-100">{contact.industry || "-"}</Badge></TableCell>
+                          <TableCell className="text-xs text-slate-600 font-bold whitespace-nowrap">{contact.phone || "-"}</TableCell>
+                          <TableCell>
+                            {agent ? (
+                              <div className="flex items-center gap-2">
+                                <div className="w-5 h-5 rounded-full border shadow-sm" style={{ backgroundColor: agent.color || "#ccc" }} />
+                                <span className="text-[11px] font-bold text-slate-700">{agent.name}</span>
+                              </div>
+                            ) : (<span className="text-slate-300 text-[10px] italic">Libre</span>)}
+                          </TableCell>
+                          <TableCell><LastInteraction contact={contact} /></TableCell>
+                          <TableCell><NextAction contactId={contact.id} /></TableCell>
+                          <TableCell onClick={e => e.stopPropagation()}>                            {editingCommentId === contact.id ? (
+                              <div className="flex items-center gap-2">
+                                <Input autoFocus className="h-8 text-[11px] border-green-300" value={tempComment} onChange={e => setTempComment(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveComment(contact.id)} onBlur={() => saveComment(contact.id)} />
+                              </div>
+                            ) : (
+                              <div className="text-[11px] text-slate-500 line-clamp-1 italic hover:bg-slate-100 p-1 rounded cursor-text" onClick={(e) => startEditingComment(e, contact)}>
+                                {contact.notes || "Note..."}
+                              </div>
+                            )}
+                          </TableCell>
+                          <TableCell className="text-right" onClick={e => e.stopPropagation()}>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity"><MoreVertical className="w-4 h-4 text-slate-400" /></Button></DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-48 shadow-xl">
+                                <DropdownMenuItem onClick={() => { setSelectedContact(contact); setIsSheetOpen(true); }} className="cursor-pointer">
+                                  <FileText className="w-4 h-4 mr-2" /> Voir Fiche
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={(e) => handleCreateTaskForContact(e, contact)} className="cursor-pointer">
+                                  <Calendar className="w-4 h-4 mr-2 text-blue-600" /> Nouvelle Action
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={(e) => handleCreateDealForContact(e, contact)} className="cursor-pointer">
+                                  <Briefcase className="w-4 h-4 mr-2 text-green-600" /> Nouvelle Affaire
+                                </DropdownMenuItem>
+                                {canDeleteContact(contact) && (
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild><DropdownMenuItem className="text-red-600 cursor-pointer" onSelect={e => e.preventDefault()}><Trash2 className="w-4 h-4 mr-2" /> Supprimer</DropdownMenuItem></AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader><AlertDialogTitle>Supprimer le contact ?</AlertDialogTitle><AlertDialogDescription>Voulez-vous vraiment supprimer <strong>{contact.firstName} {contact.lastName}</strong> ?</AlertDialogDescription></AlertDialogHeader>
+                                      <AlertDialogFooter><AlertDialogCancel>Annuler</AlertDialogCancel><AlertDialogAction onClick={() => handleDeleteContact(contact.id)} className="bg-red-600">Supprimer</AlertDialogAction></AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                )}
+                              </DropdownMenuContent>                            </DropdownMenu>
+                          </TableCell>
+                        </DraggableContactRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
             </div>
-          )}
+
+            {totalPages > 1 && (
+              <div className="px-6 py-4 bg-slate-50/50 border-t flex items-center justify-between shrink-0">
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" className="h-8 flex gap-2" disabled={currentPage === 1} onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}><ChevronLeft className="w-4 h-4" /> Précédent</Button>
+                  <span className="text-xs font-bold text-slate-600 tracking-widest uppercase">Page {currentPage} / {totalPages}</span>
+                  <Button variant="outline" size="sm" className="h-8 flex gap-2" disabled={currentPage === totalPages} onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}>Suivant <ChevronRight className="w-4 h-4" /></Button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Dialog creation nouvelle liste */}
         <Dialog open={isNewListOpen} onOpenChange={setIsNewPipelineOpen}>
           <DialogContent className="sm:max-w-[400px]">
-            <DialogHeader>
-              <DialogTitle>Nouveau Répertoire</DialogTitle>
-            </DialogHeader>
+            <DialogHeader><DialogTitle>Nouveau Répertoire</DialogTitle></DialogHeader>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label>Nom du fichier / liste</Label>
-                <Input 
-                  placeholder="Ex: Prospects Salon 2025" 
-                  value={newListName} 
-                  onChange={e => setNewListName(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleCreateList()}
-                />
+                <Label>Nom du répertoire</Label>
+                <Input placeholder="Ex: Prospects Salon 2025" value={newListName} onChange={e => setNewListName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCreateList()} />
               </div>
             </div>
             <DialogFooter>
@@ -812,41 +902,18 @@ export default function ContactsView() {
           </DialogContent>
         </Dialog>
 
-        <ContactSheet 
-          contact={selectedContact} 
-          open={isSheetOpen} 
-          onOpenChange={setIsSheetOpen} 
-          activeListId={activeListId}
-        />
-
-        <ImportContactsDialog 
-          open={isImportOpen}
-          onOpenChange={setIsImportOpen}
-          activeListId={activeListId}
-        />
-
-        <NewCardDialog 
-          open={isNewCardOpen}
-          onOpenChange={setIsNewCardOpen}
+        <ContactSheet contact={selectedContact} open={isSheetOpen} onOpenChange={setIsSheetOpen} activeListId={activeListId} />
+        <ImportContactsDialog open={isImportOpen} onOpenChange={setIsImportOpen} activeListId={activeListId} />
+        <NewCardDialog open={isNewCardOpen} onOpenChange={setIsNewCardOpen} defaultContactId={selectedContact?.id} />
+        <TaskDialog 
+          task={null}
+          open={isTaskDialogOpen}
+          onOpenChange={setIsTaskDialogOpen}
           defaultContactId={selectedContact?.id}
         />
 
         <DragOverlay dropAnimation={dropAnimation}>
-          {activeDraggingContact ? (
-            <div className="bg-white p-4 rounded-xl shadow-2xl border-2 border-green-500 flex items-center gap-3 min-w-[200px] opacity-90 cursor-grabbing">
-              <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
-                <Users className="w-5 h-5 text-green-600" />
-              </div>
-              <div>
-                <p className="font-black text-slate-900 text-sm">
-                  {activeDraggingContact.firstName} {activeDraggingContact.lastName}
-                </p>
-                <p className="text-xs text-slate-500 font-medium">
-                  {activeDraggingContact.company || "Sans entreprise"}
-                </p>
-              </div>
-            </div>
-          ) : null}
+          {/* Draggable overlay content placeholder */}
         </DragOverlay>
       </div>
     </DndContext>

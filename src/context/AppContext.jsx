@@ -51,13 +51,15 @@ export function AppProvider({ children }) {
 
   const refreshAllData = async () => {
     try {
-      const [users, pipelines, contacts, contactLists, tasks, rdvProposals] = await Promise.all([
+      const currentUserId = state.currentUser?.id;
+      const [users, pipelines, contacts, contactLists, tasks, rdvProposals, notifications] = await Promise.all([
         db.getProfiles(),
         db.getPipelines(),
         db.getContacts(),
         db.getContactLists(),
         db.getTasks(),
-        db.getProposals()
+        db.getProposals(),
+        currentUserId ? db.getNotifications(currentUserId) : Promise.resolve([])
       ]);
 
       dispatch({
@@ -68,12 +70,13 @@ export function AppProvider({ children }) {
           contacts,
           contactLists,
           tasks,
-          rdvProposals
+          rdvProposals,
+          notifications
         }
       });
     } catch (error) {
       console.error("Error loading data from Supabase:", error);
-      toast.error("Erreur lors du chargement des données");
+      toast.error("Erreur lors de la synchronisation");
       dispatch({ type: "SET_LOADING", payload: false });
     }
   };
@@ -83,32 +86,48 @@ export function AppProvider({ children }) {
     const initApp = async () => {
       dispatch({ type: "SET_LOADING", payload: true });
       
-      // Check for Supabase configuration
-      if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KEY) {
-        toast.error("Configuration Supabase manquante !", {
-          description: "Les variables d'environnement VITE_SUPABASE_URL et VITE_SUPABASE_ANON_KEY ne sont pas définies.",
-          duration: 10000,
-        });
-      }
-
       // Check for session
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
-        // Fetch profile
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('*')
-          .eq('id', session.user.id)
-          .single();
-        
-        if (profile) {
-          dispatch({ type: "SET_CURRENT_USER", payload: profile });
-          if (profile.is_approved) {
-            await refreshAllData();
+        try {
+          const profileData = await db.getProfiles();
+          const profile = profileData.find(p => p.id === session.user.id);
+          
+          if (profile) {
+            dispatch({ type: "SET_CURRENT_USER", payload: profile });
+            if (profile.isApproved) {
+              const [pipelines, contacts, contactLists, tasks, rdvProposals, notifications] = await Promise.all([
+                db.getPipelines(),
+                db.getContacts(),
+                db.getContactLists(),
+                db.getTasks(),
+                db.getProposals(),
+                db.getNotifications(profile.id)
+              ]);
+
+              dispatch({
+                type: "INIT_DATA",
+                payload: {
+                  users: profileData,
+                  pipelines,
+                  contacts,
+                  contactLists,
+                  tasks,
+                  rdvProposals,
+                  notifications
+                }
+              });
+            } else {
+              dispatch({ type: "UPDATE_USERS", payload: profileData });
+              dispatch({ type: "SET_LOADING", payload: false });
+            }
           } else {
             dispatch({ type: "SET_LOADING", payload: false });
           }
+        } catch (error) {
+          console.error("Initial load error:", error);
+          dispatch({ type: "SET_LOADING", payload: false });
         }
       } else {
         dispatch({ type: "SET_LOADING", payload: false });
@@ -117,17 +136,15 @@ export function AppProvider({ children }) {
       // Listen for auth changes
       const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
         if (event === 'SIGNED_IN' && session) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
+          const profileData = await db.getProfiles();
+          const profile = profileData.find(p => p.id === session.user.id);
           
           if (profile) {
             dispatch({ type: "SET_CURRENT_USER", payload: profile });
-            if (profile.is_approved) {
+            if (profile.isApproved) {
               await refreshAllData();
             } else {
+              dispatch({ type: "UPDATE_USERS", payload: profileData });
               dispatch({ type: "SET_LOADING", payload: false });
             }
           }

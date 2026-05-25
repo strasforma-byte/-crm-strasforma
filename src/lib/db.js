@@ -21,6 +21,11 @@ const mapContact = (c) => ({
   lastModified: c.last_modified
 })
 
+const cleanId = (id) => {
+  if (!id || id === "" || id === "none" || id === "null" || id === "undefined") return null;
+  return id;
+};
+
 const toDbContact = (c) => ({
   first_name: c.firstName,
   last_name: c.lastName,
@@ -33,36 +38,60 @@ const toDbContact = (c) => ({
   tags: c.tags,
   notes: c.notes,
   list_id: (c.listId === 'list-default' || !c.listId) ? null : c.listId,
-  assigned_agent_id: !c.assignedAgentId ? null : c.assignedAgentId,
-  created_by: c.createdBy || null,
+  assigned_agent_id: cleanId(c.assignedAgentId),
+  created_by: cleanId(c.createdBy),
   interactions: c.interactions || [],
   last_modified: new Date().toISOString()
 })
 
-const mapCard = (card) => ({
-  id: card.id,
-  title: card.title,
-  value: card.value,
-  priority: card.priority,
-  tags: card.tags || [],
-  order: card.order,
-  contactId: card.contact_id,
-  responsibleId: card.responsible_id,
-  notes: card.notes,
-  columnId: card.column_id
-})
+const mapCard = (card) => {
+  let cleanNotes = card.notes || "";
+  let history = [];
 
-const toDbCard = (card) => ({
-  column_id: card.columnId,
-  contact_id: card.contactId || card.clientId,
-  responsible_id: card.responsibleId,
-  title: card.title,
-  value: card.value,
-  priority: card.priority,
-  tags: card.tags,
-  notes: card.notes,
-  "order": card.order || 0
-})
+  const historyMatch = cleanNotes.match(/\[history:(.+)\]/);
+  if (historyMatch) {
+    try {
+      history = JSON.parse(historyMatch[1]);
+      cleanNotes = cleanNotes.replace(/\[history:.+\]/, "").trim();
+    } catch (e) {
+      console.error("Error parsing history metadata:", e);
+    }
+  }
+
+  return {
+    id: card.id,
+    title: card.title,
+    value: card.value,
+    priority: card.priority,
+    tags: card.tags || [],
+    order: card.order,
+    contactId: card.contact_id,
+    responsibleId: card.responsible_id,
+    notes: cleanNotes,
+    columnId: card.column_id,
+    history: history,
+    createdAt: card.created_at
+  };
+}
+
+const toDbCard = (card) => {
+  let notesWithMeta = card.notes || "";
+  if (card.history && card.history.length > 0) {
+    notesWithMeta += `\n[history:${JSON.stringify(card.history)}]`;
+  }
+
+  return {
+    column_id: cleanId(card.columnId),
+    contact_id: cleanId(card.contactId || card.clientId),
+    responsible_id: cleanId(card.responsibleId),
+    title: card.title,
+    value: card.value,
+    priority: card.priority,
+    tags: card.tags,
+    notes: notesWithMeta,
+    "order": card.order || 0
+  };
+}
 
 const mapPipeline = (p) => ({
   id: p.id,
@@ -77,18 +106,46 @@ const mapPipeline = (p) => ({
   })).sort((a, b) => a.order - b.order) : []
 })
 
+const mapProposal = (p) => ({
+  id: p.id,
+  title: p.title,
+  prospectorId: p.agent_id,
+  commercialId: p.commercial_id,
+  contactId: p.contact_id,
+  linkedContactId: p.contact_id,
+  linkedCardId: p.linked_card_id,
+  proposedDate: p.proposed_date,
+  proposedSlots: p.proposed_slots || [],
+  duration: p.duration,
+  notes: p.notes,
+  status: p.status,
+  refusalReason: p.refusal_reason,
+  createdAt: p.created_at
+})
+
+const mapProfile = (p) => ({
+  id: p.id,
+  email: p.email,
+  name: p.name,
+  role: p.role,
+  color: p.color,
+  isApproved: p.is_approved,
+  settings: p.settings || {},
+  createdAt: p.created_at
+})
+
 export const db = {
   // Profiles
   async getProfiles() {
     const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
     if (error) throw error
-    return data
+    return data.map(mapProfile)
   },
 
   async updateUserProfile(id, updates) {
     const { data, error } = await supabase.from('profiles').update(updates).eq('id', id).select().single()
     if (error) throw error
-    return data
+    return mapProfile(data)
   },
 
   // Contacts
@@ -125,9 +182,23 @@ export const db = {
   },
 
   async bulkInsertContacts(contacts) {
-    const { data, error } = await supabase.from('contacts').insert(contacts.map(toDbContact)).select()
-    if (error) throw error
-    return data.map(mapContact)
+    const CHUNK_SIZE = 100;
+    let allInserted = [];
+    
+    for (let i = 0; i < contacts.length; i += CHUNK_SIZE) {
+      const chunk = contacts.slice(i, i + CHUNK_SIZE);
+      const { data, error } = await supabase
+        .from('contacts')
+        .insert(chunk.map(toDbContact))
+        .select();
+      
+      if (error) throw error;
+      if (data) {
+        allInserted = [...allInserted, ...data.map(mapContact)];
+      }
+    }
+    
+    return allInserted;
   },
 
   async updateContact(id, contact) {
@@ -269,9 +340,38 @@ export const db = {
   },
 
   async updateCard(id, updates) {
-    const { data, error } = await supabase.from('pipeline_cards').update(toDbCard(updates)).eq('id', id).select().single()
-    if (error) throw error
-    return mapCard(data)
+    try {
+      // 1. Fetch current version for comparison
+      const { data: current, error: fetchError } = await supabase.from('pipeline_cards').select('*').eq('id', id).single();
+      if (fetchError) throw fetchError;
+      const oldCard = mapCard(current);
+
+      // 2. Prepare new history entries
+      const newHistory = [...(updates.history || oldCard.history || [])];
+      const now = new Date().toISOString();
+      const userId = cleanId(updates.responsibleId) || oldCard.responsibleId;
+
+      if (updates.title && updates.title !== oldCard.title) {
+        newHistory.unshift({ date: now, userId, action: `Titre modifié : "${oldCard.title}" ➔ "${updates.title}"` });
+      }
+      if (updates.value !== undefined && parseFloat(updates.value) !== parseFloat(oldCard.value)) {
+        newHistory.unshift({ date: now, userId, action: `Valeur modifiée : ${oldCard.value}€ ➔ ${updates.value}€` });
+      }
+      if (updates.columnId && updates.columnId !== oldCard.columnId) {
+        newHistory.unshift({ date: now, userId, action: "Étape du pipeline modifiée" });
+      }
+      if (updates.responsibleId && updates.responsibleId !== oldCard.responsibleId) {
+        newHistory.unshift({ date: now, userId, action: "Responsable modifié" });
+      }
+
+      // 3. Persist to DB
+      const { data, error } = await supabase.from('pipeline_cards').update(toDbCard({ ...updates, history: newHistory })).eq('id', id).select().single();
+      if (error) throw error;
+      return mapCard(data);
+    } catch (error) {
+      console.error("Error updating card with audit:", error);
+      throw error;
+    }
   },
 
   async deleteCard(id) {
@@ -281,85 +381,185 @@ export const db = {
 
   // Tasks
   async getTasks() {
-    const { data, error } = await supabase.from('tasks').select('*')
+    try {
+      const { data, error } = await supabase.from('tasks').select('*')
+      if (error) throw error
+      return data.map(t => this._mapSingleTask(t))
+    } catch (error) {
+      console.error("Error fetching tasks:", error);
+      throw error;
+    }
+  },
+
+  async insertTask(task) {
+    const cleanedLinkedCardId = cleanId(task.linkedCardId);
+    const meta = {
+      card_id: cleanedLinkedCardId,
+      type: task.type || "call"
+    };
+    const descriptionWithMeta = (task.description || "") + `\n[meta:${JSON.stringify(meta)}]`;
+    
+    const taskPayload = {
+      title: task.title,
+      description: descriptionWithMeta,
+      due_date: task.dueDate,
+      status: task.status,
+      assigned_to: cleanId(task.assignedTo),
+      contact_id: cleanId(task.contactId),
+      linked_card_id: cleanedLinkedCardId
+    };
+
+    try {
+      const { data, error } = await supabase.from('tasks').insert(taskPayload).select().single();
+      if (error) throw error;
+      return this._mapSingleTask(data);
+    } catch (err) {
+      // Fallback : insertion sans la colonne linked_card_id
+      const { linked_card_id, ...fallbackPayload } = taskPayload;
+      const { data, error } = await supabase.from('tasks').insert(fallbackPayload).select().single();
+      
+      if (error) {
+        console.error("Error inserting task (fallback):", error);
+        throw error;
+      }
+      return this._mapSingleTask(data);
+    }
+  },
+
+  async updateTask(id, task) {
+    const cleanedLinkedCardId = cleanId(task.linkedCardId);
+    const meta = {
+      card_id: cleanedLinkedCardId,
+      type: task.type || "call"
+    };
+    const descriptionWithMeta = (task.description || "") + `\n[meta:${JSON.stringify(meta)}]`;
+    
+    const taskPayload = {
+      title: task.title,
+      description: descriptionWithMeta,
+      due_date: task.dueDate,
+      status: task.status,
+      assigned_to: cleanId(task.assignedTo),
+      contact_id: cleanId(task.contactId),
+      linked_card_id: cleanedLinkedCardId
+    };
+
+    try {
+      const { data, error } = await supabase.from('tasks').update(taskPayload).eq('id', id).select().single();
+      if (error) throw error;
+      return this._mapSingleTask(data);
+    } catch (err) {
+      // Fallback : mise à jour sans la colonne linked_card_id
+      const { linked_card_id, ...fallbackPayload } = taskPayload;
+      const { data, error } = await supabase.from('tasks').update(fallbackPayload).eq('id', id).select().single();
+      
+      if (error) {
+        console.error("Error updating task (fallback):", error);
+        throw error;
+      }
+      return this._mapSingleTask(data);
+    }
+  },
+
+  async deleteTask(id) {
+    const { error } = await supabase.from('tasks').delete().eq('id', id)
     if (error) throw error
-    return data.map(t => ({
+  },
+
+  // Helper pour mapper une seule tâche (utilisé après insert)
+  _mapSingleTask(t) {
+    let linkedCardId = t.linked_card_id;
+    let type = "call"; 
+    let cleanDescription = t.description || "";
+    
+    // Tentative d'extraction du nouveau format JSON [meta:{...}]
+    const metaMatch = cleanDescription.match(/\[meta:(.+)\]/);
+    if (metaMatch) {
+      try {
+        const meta = JSON.parse(metaMatch[1]);
+        linkedCardId = meta.card_id || linkedCardId;
+        type = meta.type || type;
+        cleanDescription = cleanDescription.replace(/\[meta:.+\]/, "").trim();
+      } catch (e) {
+        // Fallback sur l'ancien format card_id si le JSON échoue
+        const cardMatch = cleanDescription.match(/\[card_id:(.+)\]/);
+        if (cardMatch) {
+          linkedCardId = cardMatch[1];
+          cleanDescription = cleanDescription.replace(/\[card_id:.+\]/, "").trim();
+        }
+      }
+    } else {
+      // Fallback sur l'ancien format card_id
+      const cardMatch = cleanDescription.match(/\[card_id:(.+)\]/);
+      if (cardMatch) {
+        linkedCardId = cardMatch[1];
+        cleanDescription = cleanDescription.replace(/\[card_id:.+\]/, "").trim();
+      }
+    }
+
+    return {
       id: t.id,
       title: t.title,
-      description: t.description,
+      description: cleanDescription,
       dueDate: t.due_date,
       date: t.due_date ? t.due_date.split('T')[0] : null,
       time: t.due_date ? (() => {
         const d = new Date(t.due_date);
+        if (isNaN(d.getTime())) return '09:00';
         return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
       })() : '09:00',
+      type: type,
       status: t.status,
       assignedTo: t.assigned_to,
       userId: t.assigned_to,
       contactId: t.contact_id,
       linkedContactId: t.contact_id,
-      linkedCardId: t.linked_card_id,
+      linkedCardId: linkedCardId,
       createdAt: t.created_at
-    }))
-  },
-
-  async insertTask(task) {
-    const { data, error } = await supabase.from('tasks').insert({
-      title: task.title,
-      description: task.description,
-      due_date: task.dueDate,
-      status: task.status,
-      assigned_to: task.assignedTo,
-      contact_id: task.contactId,
-      linked_card_id: task.linkedCardId
-    }).select().single()
-    if (error) throw error
-    return {
-      ...data,
-      id: data.id,
-      title: data.title,
-      description: data.description,
-      dueDate: data.due_date,
-      date: data.due_date ? data.due_date.split('T')[0] : null,
-      time: data.due_date ? (() => {
-        const d = new Date(data.due_date);
-        return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-      })() : '09:00',
-      status: data.status,
-      assignedTo: data.assigned_to,
-      userId: data.assigned_to,
-      contactId: data.contact_id,
-      linkedContactId: data.contact_id,
-      linkedCardId: data.linked_card_id
-    }
-  },
-
-  async updateTask(id, task) {
-    const { data, error } = await supabase.from('tasks').update({
-      title: task.title,
-      description: task.description,
-      due_date: task.dueDate,
-      status: task.status,
-      assigned_to: task.assignedTo,
-      contact_id: task.contactId,
-      linked_card_id: task.linkedCardId
-    }).eq('id', id).select().single()
-    if (error) throw error
-    return data
+    };
   },
 
   // Proposals
   async getProposals() {
     const { data, error } = await supabase.from('rdv_proposals').select('*')
     if (error) throw error
-    return data.map(p => ({
-      id: p.id,
-      contactId: p.contact_id,
-      agentId: p.agent_id,
-      proposedSlots: p.proposed_slots,
-      status: p.status,
-      createdAt: p.created_at
-    }))
+    return data.map(mapProposal)
+  },
+
+  async insertProposal(proposal) {
+    const { data, error } = await supabase.from('rdv_proposals').insert({
+      title: proposal.title,
+      agent_id: cleanId(proposal.prospectorId),
+      commercial_id: cleanId(proposal.commercialId),
+      contact_id: cleanId(proposal.linkedContactId),
+      linked_card_id: cleanId(proposal.linkedCardId),
+      proposed_date: proposal.proposedDate,
+      proposed_slots: proposal.proposedSlots || [],
+      duration: proposal.duration,
+      notes: proposal.notes,
+      status: proposal.status || 'pending'
+    }).select().single()
+    
+    if (error) throw error
+    return mapProposal(data)
+  },
+
+  async updateProposal(id, updates) {
+    const { data, error } = await supabase.from('rdv_proposals').update({
+      title: updates.title,
+      agent_id: cleanId(updates.prospectorId),
+      commercial_id: cleanId(updates.commercialId),
+      contact_id: cleanId(updates.linkedContactId),
+      linked_card_id: cleanId(updates.linkedCardId),
+      proposed_date: updates.proposedDate,
+      status: updates.status,
+      notes: updates.notes,
+      duration: updates.duration,
+      refusal_reason: updates.refusalReason
+    }).eq('id', id).select().single()
+    
+    if (error) throw error
+    return mapProposal(data)
   },
 
   // Notifications
@@ -371,5 +571,30 @@ export const db = {
       .order('created_at', { ascending: false })
     if (error) throw error
     return data
+  },
+
+  async insertNotification(notif) {
+    const { data, error } = await supabase.from('notifications').insert({
+      user_id: notif.userId,
+      title: notif.title || "Notification",
+      message: notif.message,
+      type: notif.type,
+      read: notif.read || false,
+      related_id: notif.relatedId
+    }).select().single()
+    
+    if (error) throw error
+    return data
+  },
+
+  async updateNotification(id, updates) {
+    const { data, error } = await supabase.from('notifications').update(updates).eq('id', id).select().single()
+    if (error) throw error
+    return data
+  },
+
+  async markAllNotificationsAsRead(userId) {
+    const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', userId)
+    if (error) throw error
   }
 }

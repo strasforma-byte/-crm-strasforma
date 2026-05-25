@@ -13,7 +13,22 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 
-export default function KanbanColumn({ column, onCardClick }) {
+import { useApp } from "@/context/AppContext";
+import { db } from "@/lib/db";
+import { toast } from "sonner";
+import { 
+  AlertDialog, 
+  AlertDialogAction, 
+  AlertDialogCancel, 
+  AlertDialogContent, 
+  AlertDialogDescription, 
+  AlertDialogFooter, 
+  AlertDialogHeader, 
+  AlertDialogTitle, 
+  AlertDialogTrigger 
+} from "@/components/ui/alert-dialog";
+
+export default function KanbanColumn({ column, onCardClick, onQuickCreate }) {
   const { setNodeRef } = useDroppable({
     id: column.id,
   });
@@ -22,6 +37,47 @@ export default function KanbanColumn({ column, onCardClick }) {
   const [colName, setColName] = useState(column.name);
 
   const totalValue = column.cards.reduce((sum, card) => sum + (card.value || 0), 0);
+
+  const handleRename = async () => {
+    if (!colName.trim() || colName === column.name) {
+      setIsEditingName(false);
+      setColName(column.name);
+      return;
+    }
+
+    try {
+      await db.updateColumn(column.id, { name: colName });
+      const updatedPipelines = state.pipelines.map(p => ({
+        ...p,
+        columns: p.columns.map(c => c.id === column.id ? { ...c, name: colName } : c)
+      }));
+      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+      setIsEditingName(false);
+      toast.success("Étape renommée");
+    } catch (error) {
+      toast.error("Erreur lors du renommage");
+      setColName(column.name);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (column.cards.length > 0) {
+      toast.error("Impossible de supprimer une étape contenant des affaires");
+      return;
+    }
+
+    try {
+      await db.deleteColumn(column.id);
+      const updatedPipelines = state.pipelines.map(p => ({
+        ...p,
+        columns: p.columns.filter(c => c.id !== column.id)
+      }));
+      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+      toast.success("Étape supprimée");
+    } catch (error) {
+      toast.error("Erreur lors de la suppression");
+    }
+  };
 
   return (
     <div className="flex flex-col w-[300px] h-full bg-slate-100/50 rounded-xl border border-slate-200 shadow-sm">
@@ -33,12 +89,12 @@ export default function KanbanColumn({ column, onCardClick }) {
                 autoFocus 
                 value={colName} 
                 onChange={e => setColName(e.target.value)}
-                onBlur={() => setIsEditingName(false)}
-                onKeyDown={e => e.key === 'Enter' && setIsEditingName(false)}
+                onBlur={handleRename}
+                onKeyDown={e => e.key === 'Enter' && handleRename()}
                 className="h-7 text-sm font-bold bg-white"
               />
             ) : (
-              <h3 className="font-bold text-slate-700 text-sm truncate" onClick={() => setIsEditingName(true)}>
+              <h3 className="font-bold text-slate-700 text-sm truncate cursor-pointer hover:text-green-600" onClick={() => setIsEditingName(true)}>
                 {column.name}
               </h3>
             )}
@@ -54,14 +110,38 @@ export default function KanbanColumn({ column, onCardClick }) {
             </DropdownMenuTrigger>
             <DropdownMenuContent>
               <DropdownMenuItem onClick={() => setIsEditingName(true)}>Renommer</DropdownMenuItem>
-              <DropdownMenuItem className="text-red-600">Supprimer</DropdownMenuItem>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <DropdownMenuItem className="text-red-600" onSelect={(e) => e.preventDefault()}>
+                    Supprimer
+                  </DropdownMenuItem>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Supprimer cette étape ?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Cette action est définitive. Vous ne pouvez supprimer que les étapes vides.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Annuler</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete} className="bg-red-600">Supprimer</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
         
         <div className="flex items-center justify-between text-[11px] font-bold">
-          <span className="text-green-600">{totalValue.toLocaleString()} €</span>
-          <Button variant="ghost" size="icon" className="h-5 w-5 text-slate-400 hover:text-green-600">
+          <span className="text-green-600 font-black">{totalValue.toLocaleString()} €</span>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="h-5 w-5 text-slate-400 hover:text-green-600"
+            onClick={() => onQuickCreate && onQuickCreate(column.id)}
+            title="Ajouter une affaire ici"
+          >
             <Plus className="w-3.5 h-3.5" />
           </Button>
         </div>

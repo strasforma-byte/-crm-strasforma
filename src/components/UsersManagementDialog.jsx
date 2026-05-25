@@ -116,7 +116,7 @@ export default function UsersManagementDialog({ open, onOpenChange }) {
                     </Select>
                   </TableCell>
                   <TableCell>
-                    {user.is_approved ? (
+                    {user.isApproved ? (
                       <Badge className="bg-green-100 text-green-700 hover:bg-green-100 border-green-200">Actif</Badge>
                     ) : (
                       <Badge className="bg-amber-100 text-amber-700 hover:bg-amber-100 border-amber-200">En attente</Badge>
@@ -125,12 +125,12 @@ export default function UsersManagementDialog({ open, onOpenChange }) {
                   <TableCell className="text-right">
                     <div className="flex justify-end items-center gap-3">
                       <span className="text-[10px] font-bold uppercase text-slate-400">
-                        {user.is_approved ? "Approuvé" : "Bloqué"}
+                        {user.isApproved ? "Approuvé" : "Bloqué"}
                       </span>
                       <Switch 
                         disabled={loadingId === user.id || user.email === 'ismail.harrouchi@strasforma.fr'}
-                        checked={user.is_approved}
-                        onCheckedChange={() => handleToggleApproval(user.id, user.is_approved)}
+                        checked={user.isApproved}
+                        onCheckedChange={() => handleToggleApproval(user.id, user.isApproved)}
                       />
                     </div>
                   </TableCell>

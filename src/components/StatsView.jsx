@@ -1,8 +1,10 @@
 import React, { useState, useMemo } from "react";
+import * as XLSX from "xlsx";
 import { useApp } from "@/context/AppContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
   Select, 
   SelectContent, 
@@ -18,7 +20,9 @@ import {
   Clock,
   Calendar,
   Users,
-  Target
+  Target,
+  History,
+  Download
 } from "lucide-react";
 import { 
   startOfToday, 
@@ -26,8 +30,10 @@ import {
   startOfMonth, 
   startOfYear, 
   isWithinInterval, 
-  endOfToday 
+  endOfToday,
+  formatDistanceToNow
 } from "date-fns";
+import { fr } from "date-fns/locale";
 
 export default function StatsView() {
   const { state } = useApp();
@@ -102,12 +108,97 @@ export default function StatsView() {
         meetingsDoneCount: meetingsDone.length,
         conversionRate,
         activeDealsCount: filteredDeals.length - wonDeals.length,
-        totalCount: filteredDeals.length
+        totalCount: filteredDeals.length,
+        filteredTasks: tasks // Expose pour les compteurs
       };
     } catch (e) {
       return { totalWonValue: 0, wonCount: 0, avgWonValue: 0, meetingsCount: 0, meetingsDoneCount: 0, conversionRate: 0, activeDealsCount: 0, totalCount: 0 };
     }
   }, [state, period, agentId]);
+
+  const recentActivity = useMemo(() => {
+    const pipelines = Array.isArray(state?.pipelines) ? state.pipelines : [];
+    const allDeals = pipelines.flatMap(p => (p.columns || []).flatMap(col => col.cards || []));
+    
+    let activities = allDeals.flatMap(deal => 
+      (deal.history || []).map(h => ({
+        ...h,
+        dealTitle: deal.title,
+        dealId: deal.id
+      }))
+    );
+
+    if (agentId !== "all") {
+      activities = activities.filter(a => a.userId === agentId);
+    }
+
+    return activities
+      .sort((a, b) => new Date(b.date) - new Date(a.date))
+      .slice(0, 15);
+  }, [state.pipelines, agentId]);
+
+  const agentPerformance = useMemo(() => {
+    const pipelines = Array.isArray(state?.pipelines) ? state.pipelines : [];
+    const allCards = pipelines.flatMap(p => (p.columns || []).flatMap(col => col.cards || []));
+    const allTasks = Array.isArray(state?.tasks) ? state.tasks : [];
+
+    return state.users.map(u => {
+      const userDeals = allCards.filter(c => c.responsibleId === u.id);
+      const wonDeals = userDeals.filter(c => c.columnId?.toLowerCase().includes("gagné") || c.columnId?.toLowerCase().includes("won"));
+      const totalWonValue = wonDeals.reduce((sum, c) => sum + (c.value || 0), 0);
+      const pendingTasks = allTasks.filter(t => t.userId === u.id && t.status !== "done").length;
+
+      return {
+        ...u,
+        wonCount: wonDeals.length,
+        totalWonValue,
+        pendingTasks
+      };
+    }).sort((a, b) => b.totalWonValue - a.totalWonValue);
+  }, [state.users, state.pipelines, state.tasks]);
+
+  const handleExportReport = () => {
+    try {
+      const workbook = XLSX.utils.book_new();
+
+      // 1. Sheet KPIs Globaux
+      const kpiData = [
+        { Indicateur: "Taux de Closing", Valeur: `${stats.conversionRate}%` },
+        { Indicateur: "Panier Moyen", Valeur: `${stats.avgWonValue} €` },
+        { Indicateur: "Affaires Gagnées", Valeur: stats.wonCount },
+        { Indicateur: "Volume Total Gagné", Valeur: `${stats.totalWonValue} €` },
+        { Indicateur: "Affaires Actives", Valeur: stats.activeDealsCount },
+        { Indicateur: "RDV Honorés", Valeur: `${stats.meetingsDoneCount} / ${stats.meetingsCount}` }
+      ];
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(kpiData), "KPIs Globaux");
+
+      // 2. Sheet Classement Équipe
+      const teamData = agentPerformance.map(a => ({
+        Agent: a.name,
+        Rôle: a.role,
+        "Affaires Gagnées": a.wonCount,
+        "Volume (€)": a.totalWonValue,
+        "Tâches en cours": a.pendingTasks
+      }));
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(teamData), "Classement Équipe");
+
+      // 3. Sheet Flux d'Activité
+      const activityData = recentActivity.map(act => ({
+        Date: format(new Date(act.date), "dd/MM/yyyy HH:mm"),
+        Agent: state.users.find(u => u.id === act.userId)?.name || "Système",
+        Action: act.action,
+        Affaire: act.dealTitle
+      }));
+      XLSX.utils.book_append_sheet(workbook, XLSX.utils.json_to_sheet(activityData), "Flux d'Activité");
+
+      const fileName = `crm-rapport-performance-${period}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+      XLSX.writeFile(workbook, fileName);
+      toast.success("Rapport de performance généré !");
+    } catch (error) {
+      console.error("Report export error:", error);
+      toast.error("Erreur lors de la génération du rapport");
+    }
+  };
 
   const safeUsers = Array.isArray(state?.users) ? state.users : [];
 
@@ -120,6 +211,10 @@ export default function StatsView() {
         </div>
 
         <div className="flex gap-2">
+          <Button variant="outline" onClick={handleExportReport} className="h-10 bg-white border-slate-200 text-slate-600 hover:bg-slate-50 font-bold">
+            <Download className="w-4 h-4 mr-2" /> Rapport Excel
+          </Button>
+
           <Select value={period} onValueChange={setPeriod}>
             <SelectTrigger className="w-[140px] bg-slate-50 border-none">
               <Calendar className="w-3.5 h-3.5 mr-2 text-slate-400" />
@@ -218,30 +313,79 @@ export default function StatsView() {
           </CardContent>
         </Card>
 
-        <Card className="border-none shadow-sm">
-          <CardHeader>
-            <CardTitle className="text-lg font-bold">Activités</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {[
-              { type: 'call', label: 'Appels', color: 'bg-blue-500' },
-              { type: 'meeting', label: 'RDV', color: 'bg-green-500' },
-              { type: 'email', label: 'Emails', color: 'bg-purple-500' },
-              { type: 'relance', label: 'Relances', color: 'bg-orange-500' },
-            ].map(item => {
-              const count = (Array.isArray(state?.tasks) ? state.tasks : []).filter(t => t.type === item.type).length;
-              return (
-                <div key={item.type} className="flex items-center justify-between p-3 rounded-lg bg-slate-50/50 border border-slate-100">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${item.color}`} />
-                    <span className="text-xs font-bold text-slate-600">{item.label}</span>
+        <div className="space-y-6">
+          <Card className="border-none shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-lg font-bold">Activités du groupe</CardTitle>
+              <p className="text-[10px] text-slate-400 uppercase font-black tracking-widest">
+                {period === "all" ? "Toute la période" : `Période : ${period}`}
+              </p>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {[
+                { type: 'call', label: 'Appels', color: 'bg-blue-500' },
+                { type: 'meeting', label: 'RDV', color: 'bg-green-500' },
+                { type: 'email', label: 'Emails', color: 'bg-purple-500' },
+                { type: 'relance', label: 'Relances', color: 'bg-orange-500' },
+              ].map(item => {
+                const count = (stats.filteredTasks || []).filter(t => t.type === item.type).length;
+                const totalEver = (Array.isArray(state?.tasks) ? state.tasks : []).filter(t => t.type === item.type).length;
+                
+                return (
+                  <div key={item.type} className="flex items-center justify-between p-3 rounded-xl bg-slate-50/50 border border-slate-100 hover:bg-slate-50 transition-colors">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full ${item.color} shadow-sm`} />
+                      <span className="text-[11px] font-black text-slate-700 uppercase tracking-tight">{item.label}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="default" className="bg-slate-900 text-[10px] h-5 min-w-[24px] flex justify-center text-white">{count}</Badge>
+                      <span className="text-[9px] text-slate-400 font-bold">/ {totalEver}</span>
+                    </div>
                   </div>
-                  <Badge variant="outline" className="text-[10px] font-bold">{count}</Badge>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
+                );
+              })}
+            </CardContent>
+          </Card>
+
+          <Card className="border-none shadow-sm">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-lg font-bold">Flux d'activité</CardTitle>
+              <History className="w-4 h-4 text-slate-400" />
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {recentActivity.length === 0 ? (
+                  <p className="text-xs text-slate-500 italic text-center py-4">Aucune activité récente</p>
+                ) : (
+                  recentActivity.map((act, i) => {
+                    const user = state.users.find(u => u.id === act.userId);
+                    return (
+                      <div key={i} className="flex gap-3 relative pb-4 last:pb-0">
+                        {i !== recentActivity.length - 1 && (
+                          <div className="absolute left-[11px] top-7 bottom-0 w-[1px] bg-slate-100" />
+                        )}
+                        <div className="w-6 h-6 rounded-full border shadow-sm shrink-0 flex items-center justify-center text-[10px] text-white font-bold" style={{ backgroundColor: user?.color }}>
+                          {user?.name?.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[11px] text-slate-900 leading-tight">
+                            <span className="font-bold">{user?.name}</span> {act.action}
+                          </p>
+                          <p className="text-[10px] text-green-600 font-medium truncate mt-0.5">
+                            {act.dealTitle}
+                          </p>
+                          <p className="text-[9px] text-slate-400 mt-1 uppercase font-bold tracking-tighter">
+                            {formatDistanceToNow(new Date(act.date), { addSuffix: true, locale: fr })}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

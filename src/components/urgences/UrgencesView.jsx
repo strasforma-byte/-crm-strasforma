@@ -20,12 +20,17 @@ import {
   Handshake,
   User as UserIcon,
   Building2,
-  Briefcase
+  Briefcase,
+  Redo2,
+  Plus,
+  AlertTriangle
 } from "lucide-react";
 import { format, isSameDay, isToday, isTomorrow, isYesterday, startOfToday, addDays } from "date-fns";
 import { fr } from "date-fns/locale";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { toast } from "sonner";
+import ProposalSheet from "../agenda/ProposalSheet";
+import TaskDialog from "../agenda/TaskDialog";
 
 export default function UrgencesView() {
   const { state, dispatch, isAdmin } = useApp();
@@ -36,8 +41,24 @@ export default function UrgencesView() {
     late: true,
     today: true,
     tomorrow: true,
-    proposals: true
+    proposals: true,
+    neglected: true
   });
+
+  const [selectedProposal, setSelectedProposal] = useState(null);
+  const [isProposalSheetOpen, setIsProposalSheetOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
+
+  const handleTaskClick = (task) => {
+    setSelectedTask(task);
+    setIsTaskDialogOpen(true);
+  };
+
+  const handleProposalClick = (prop) => {
+    setSelectedProposal(prop);
+    setIsProposalSheetOpen(true);
+  };
 
   const toggleSection = (section) => {
     setOpenSections(prev => ({ ...prev, [section]: !prev[section] }));
@@ -79,10 +100,155 @@ export default function UrgencesView() {
     return props;
   }, [state.rdvProposals, userFilter, isAdmin, currentUser]);
 
-  const handleComplete = (taskId) => {
-    const updated = state.tasks.map(t => t.id === taskId ? { ...t, status: "done" } : t);
-    dispatch({ type: "UPDATE_TASKS", payload: updated });
-    toast.success("Tâche terminée !");
+  const neglectedDeals = useMemo(() => {
+    const pipelines = Array.isArray(state.pipelines) ? state.pipelines : [];
+    const allCards = pipelines.flatMap(p => (p.columns || []).flatMap(col => (col.cards || [])));
+    const myCards = isAdmin && userFilter === "all" ? allCards : 
+                    allCards.filter(c => c.responsibleId === (userFilter === "all" ? currentUser.id : userFilter));
+    
+    return myCards.filter(card => {
+      const hasPendingTask = (state.tasks || []).some(t => t.linkedCardId === card.id && t.status !== "done");
+      return !hasPendingTask;
+    });
+  }, [state.pipelines, state.tasks, userFilter, isAdmin, currentUser]);
+
+  const handleDelete = async (e, task) => {
+    e.stopPropagation();
+    try {
+      // 1. Delete from DB
+      await db.deleteTask(task.id);
+
+      // 2. Update local state
+      const updated = state.tasks.filter(t => t.id !== task.id);
+      dispatch({ type: "UPDATE_TASKS", payload: updated });
+
+      // 3. If linked to a card, update its history
+      if (task.linkedCardId) {
+        const pipeline = (Array.isArray(state.pipelines) ? state.pipelines : []).find(p => p.columns.some(col => col.cards.some(c => c.id === task.linkedCardId)));
+        if (pipeline) {
+          const card = pipeline.columns.flatMap(col => col.cards).find(c => c.id === task.linkedCardId);
+          if (card) {
+            const historyEntry = {
+              date: new Date().toISOString(),
+              userId: currentUser.id,
+              action: `Action supprimée depuis les urgences : ${task.title}`
+            };
+            const updatedCard = { ...card, history: [historyEntry, ...(card.history || [])] };
+            await db.updateCard(card.id, updatedCard);
+            
+            const updatedPipelines = state.pipelines.map(p => p.id === pipeline.id ? {
+              ...p,
+              columns: p.columns.map(col => ({
+                ...col,
+                cards: col.cards.map(c => c.id === card.id ? updatedCard : c)
+              }))
+            } : p);
+            dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+          }
+        }
+      }
+
+      toast.success("Tâche supprimée");
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      toast.error("Erreur lors de la suppression");
+    }
+  };
+
+  const handlePostpone = async (e, task) => {
+    e.stopPropagation();
+    try {
+      const tomorrow = addDays(new Date(), 1);
+      const newDateStr = format(tomorrow, "yyyy-MM-dd");
+      const newDueDate = new Date(tomorrow);
+      const [h, m] = (task.time || "09:00").split(":").map(Number);
+      newDueDate.setHours(h, m);
+
+      const updatedTaskData = { 
+        ...task, 
+        date: newDateStr, 
+        dueDate: newDueDate.toISOString() 
+      };
+
+      await db.updateTask(task.id, updatedTaskData);
+      
+      const updatedTasks = state.tasks.map(t => t.id === task.id ? { ...t, date: newDateStr, dueDate: updatedTaskData.dueDate } : t);
+      dispatch({ type: "UPDATE_TASKS", payload: updatedTasks });
+
+      // Audit automatique pour les affaires liées
+      if (task.linkedCardId) {
+        const pipeline = (Array.isArray(state.pipelines) ? state.pipelines : []).find(p => p.columns.some(col => col.cards.some(c => c.id === task.linkedCardId)));
+        if (pipeline) {
+          const card = pipeline.columns.flatMap(col => col.cards).find(c => c.id === task.linkedCardId);
+          if (card) {
+            const historyEntry = {
+              date: new Date().toISOString(),
+              userId: currentUser.id,
+              action: `Action reportée à demain depuis les urgences : ${task.title}`
+            };
+            const updatedCard = { ...card, history: [historyEntry, ...(card.history || [])] };
+            await db.updateCard(card.id, updatedCard);
+            await refreshAllData();
+          }
+        }
+      }
+
+      toast.success("Action reportée à demain");
+    } catch (error) {
+      console.error("Error postponing task:", error);
+      toast.error("Erreur lors du report");
+    }
+  };
+
+  const handleComplete = async (e, taskId) => {
+    e.stopPropagation();
+    try {
+      const task = state.tasks.find(t => t.id === taskId);
+      if (!task) return;
+
+      const updatedTasks = state.tasks.map(t => t.id === taskId ? { ...t, status: "done" } : t);
+      await db.updateTask(taskId, { ...task, status: "done" });
+      dispatch({ type: "UPDATE_TASKS", payload: updatedTasks });
+
+      // If linked to a card, update its history
+      if (task.linkedCardId) {
+        const pipeline = state.pipelines.find(p => p.columns.some(col => col.cards.some(c => c.id === task.linkedCardId)));
+        if (pipeline) {
+          const card = pipeline.columns.flatMap(col => col.cards).find(c => c.id === task.linkedCardId);
+          if (card) {
+            const historyEntry = {
+              date: new Date().toISOString(),
+              userId: currentUser.id,
+              action: `Action terminée : ${task.title}`
+            };
+            const updatedCard = {
+              ...card,
+              history: [historyEntry, ...(card.history || [])]
+            };
+            await db.updateCard(card.id, updatedCard);
+            
+            const updatedPipelines = state.pipelines.map(p => {
+              if (p.id === pipeline.id) {
+                return {
+                  ...p,
+                  columns: p.columns.map(col => ({
+                    ...col,
+                    cards: col.cards.map(c => c.id === card.id ? updatedCard : c)
+                  }))
+                };
+              }
+              return p;
+            });
+            dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+          }
+        }
+      }
+
+      toast.success("Tâche terminée !");
+    } catch (error) {
+      console.error("Error completing task:", error);
+      toast.error("Erreur lors de la mise à jour de la tâche");
+    }
   };
 
   const getTaskIcon = (type) => {
@@ -101,7 +267,10 @@ export default function UrgencesView() {
     const assignedUser = state.users.find(u => u.id === task.userId);
 
     return (
-      <Card className="p-4 flex items-center gap-4 hover:shadow-md transition-shadow group">
+      <Card 
+        className="p-4 flex items-center gap-4 hover:shadow-md transition-shadow group cursor-pointer"
+        onClick={() => handleTaskClick(task)}
+      >
         <div className="shrink-0 p-2 bg-slate-50 rounded-lg">
           {getTaskIcon(task.type)}
         </div>
@@ -142,10 +311,13 @@ export default function UrgencesView() {
           </div>
         </div>
         <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <Button variant="outline" size="sm" className="h-8 text-xs text-green-600" onClick={() => handleComplete(task.id)}>
+          <Button variant="outline" size="sm" className="h-8 text-xs text-blue-600 border-blue-100 hover:bg-blue-50 font-bold" onClick={(e) => handlePostpone(e, task)}>
+            <Redo2 className="w-3.5 h-3.5 mr-1.5" /> Reporter
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs text-green-600 border-green-100 hover:bg-green-50 font-bold" onClick={(e) => handleComplete(e, task.id)}>
             <CheckCircle2 className="w-3.5 h-3.5 mr-1.5" /> Fait
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600">
+          <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600" onClick={(e) => handleDelete(e, task)}>
             <X className="w-4 h-4" />
           </Button>
         </div>
@@ -282,13 +454,16 @@ export default function UrgencesView() {
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-2 pt-2 pl-4">
               {pendingProposals.map(prop => (
-                <Card key={prop.id} className="p-4 flex items-center gap-4 bg-amber-50/30 border-amber-100">
+                <Card key={prop.id} className="p-4 flex items-center gap-4 bg-amber-50/30 border-amber-100 hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleProposalClick(prop)}>
                   <div className="text-xl">📋</div>
                   <div className="flex-1">
                     <p className="font-bold text-sm">{prop.title}</p>
                     <p className="text-xs text-slate-500">Proposé par {state.users.find(u => u.id === prop.prospectorId)?.name}</p>
                   </div>
-                  <Button size="sm" variant="outline" className="text-amber-700 border-amber-200 hover:bg-amber-100">
+                  <Button size="sm" variant="outline" className="text-amber-700 border-amber-200 hover:bg-amber-100" onClick={(e) => {
+                    e.stopPropagation();
+                    handleProposalClick(prop);
+                  }}>
                     Traiter
                   </Button>
                 </Card>
@@ -296,7 +471,63 @@ export default function UrgencesView() {
             </CollapsibleContent>
           </Collapsible>
         )}
+
+        {/* AFFAIRES SANS ACTIVITÉ */}
+        {neglectedDeals.length > 0 && (
+          <Collapsible open={openSections.neglected} onOpenChange={() => toggleSection('neglected')} className="space-y-2">
+            <CollapsibleTrigger asChild>
+              <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg cursor-pointer hover:bg-amber-100 transition-colors border border-amber-100">
+                <div className="flex items-center gap-3">
+                  <div className="bg-amber-500 p-1 rounded-full text-white">
+                    <AlertTriangle className="w-4 h-4" />
+                  </div>
+                  <h3 className="font-bold text-amber-900">Affaires sans activité</h3>
+                  <Badge className="bg-amber-200 text-amber-700 border-none">{neglectedDeals.length}</Badge>
+                </div>
+                {openSections.neglected ? <ChevronDown className="w-5 h-5 text-amber-400" /> : <ChevronRight className="w-5 h-5 text-amber-400" />}
+              </div>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="space-y-2 pt-2 pl-4">
+              <p className="text-[11px] text-amber-600 mb-2 font-medium italic">⚠️ Ces affaires n'ont aucune action future planifiée.</p>
+              {neglectedDeals.map(deal => (
+                <Card 
+                  key={deal.id} 
+                  className="p-4 flex items-center gap-4 hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => {
+                    setSelectedTask({ linkedCardId: deal.id, linkedContactId: deal.contactId || deal.clientId });
+                    setIsTaskDialogOpen(true);
+                  }}
+                >
+                  <div className="shrink-0 p-2 bg-amber-100 rounded-lg">
+                    <Briefcase className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm truncate">{deal.title}</p>
+                    <p className="text-[11px] text-slate-500">
+                      {state.contacts.find(c => c.id === deal.contactId || c.id === deal.clientId)?.company || "Client inconnu"}
+                    </p>
+                  </div>
+                  <Button size="sm" variant="ghost" className="text-amber-600 hover:bg-amber-50 font-bold">
+                    <Plus className="w-3.5 h-3.5 mr-1" /> Planifier
+                  </Button>
+                </Card>
+              ))}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
       </div>
+
+      <ProposalSheet 
+        proposal={selectedProposal}
+        open={isProposalSheetOpen}
+        onOpenChange={setIsProposalSheetOpen}
+      />
+
+      <TaskDialog 
+        task={selectedTask}
+        open={isTaskDialogOpen}
+        onOpenChange={setIsTaskDialogOpen}
+      />
     </div>
   );
 }

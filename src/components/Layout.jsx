@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { useApp } from "@/context/AppContext";
 import { supabase } from "@/lib/supabase";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -25,7 +25,9 @@ import {
   Shield,
   Search,
   Plus,
-  BarChart3
+  BarChart3,
+  Briefcase,
+  X
 } from "lucide-react";
 import SettingsDialog from "./SettingsDialog";
 import UsersManagementDialog from "./UsersManagementDialog";
@@ -35,12 +37,31 @@ import ContactsView from "./contacts/ContactsView";
 import AgendaView from "./agenda/AgendaView";
 import UrgencesView from "./urgences/UrgencesView";
 import StatsView from "./StatsView";
+import { formatDistanceToNow } from "date-fns";
+import { fr } from "date-fns/locale";
+import { db } from "@/lib/db";
+import { toast } from "sonner";
+import { 
+  Popover, 
+  PopoverContent, 
+  PopoverTrigger 
+} from "@/components/ui/popover";
+import { 
+  Command, 
+  CommandEmpty, 
+  CommandGroup, 
+  CommandItem, 
+  CommandList 
+} from "@/components/ui/command";
 
 export default function Layout() {
   const { state, dispatch, isAdmin } = useApp();
   const [activeTab, setActiveTab] = useState("pipeline");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isUsersOpen, setIsUsersOpen] = useState(false);
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [searchJumpId, setSearchJumpId] = useState(null);
 
   const user = state.currentUser;
   
@@ -50,10 +71,54 @@ export default function Layout() {
     await supabase.auth.signOut();
   };
 
+  const handleNotificationClick = async (notif) => {
+    try {
+      if (!notif.read) {
+        await db.updateNotification(notif.id, { read: true });
+        const updated = state.notifications.map(n => n.id === notif.id ? { ...n, read: true } : n);
+        dispatch({ type: "UPDATE_NOTIFICATIONS", payload: updated });
+      }
+
+      if (notif.relatedId) {
+        toast.info("Action liée : " + notif.message);
+      }
+    } catch (error) {
+      console.error("Error handling notification click:", error);
+    }
+  };
+
+  const filteredResults = useMemo(() => {
+    if (!globalSearch.trim() || globalSearch.length < 2) return { contacts: [], deals: [] };
+    const term = globalSearch.toLowerCase();
+    
+    const contacts = (state.contacts || []).filter(c => 
+      `${c.firstName} ${c.lastName}`.toLowerCase().includes(term) || 
+      (c.company || "").toLowerCase().includes(term)
+    ).slice(0, 5);
+
+    const deals = (Array.isArray(state.pipelines) ? state.pipelines : []).flatMap(p => 
+      (p.columns || []).flatMap(col => (col.cards || []))
+    ).filter(d => 
+      (d.title || "").toLowerCase().includes(term)
+    ).slice(0, 5);
+
+    return { contacts, deals };
+  }, [globalSearch, state.contacts, state.pipelines]);
+
+  const handleResultClick = (type, id) => {
+    setGlobalSearch("");
+    setIsSearchOpen(false);
+    setSearchJumpId(id);
+    if (type === "contact") {
+      setActiveTab("contacts");
+    } else if (type === "deal") {
+      setActiveTab("pipeline");
+    }
+  };
+
   const unreadNotifications = (state.notifications || []).filter(n => !n.read).length;
   const pendingProposals = (state.rdvProposals || []).filter(p => p.status === "pending" && p.commercialId === user.id).length;
   
-  // Calculate emergencies for badge
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const emergenciesCount = (state.tasks || []).filter(t => {
@@ -74,14 +139,61 @@ export default function Layout() {
         </div>
 
         <div className="flex-1 max-w-md mx-8 hidden md:block">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input 
-              type="text" 
-              placeholder="Rechercher une affaire, un contact..." 
-              className="w-full bg-slate-100 border-none rounded-full py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500 transition-all"
-            />
-          </div>
+          <Popover open={isSearchOpen} onOpenChange={setIsSearchOpen}>
+            <PopoverTrigger asChild>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input 
+                  type="text" 
+                  value={globalSearch}
+                  onChange={(e) => {
+                    setGlobalSearch(e.target.value);
+                    if (e.target.value.length >= 2) setIsSearchOpen(true);
+                    else setIsSearchOpen(false);
+                  }}
+                  placeholder="Rechercher une affaire, un contact..." 
+                  className="w-full bg-slate-100 border-none rounded-full py-2 pl-10 pr-4 text-sm focus:ring-2 focus:ring-green-500 transition-all outline-none"
+                />
+              </div>
+            </PopoverTrigger>
+            <PopoverContent className="p-0 w-[400px] shadow-2xl" align="start">
+              <Command>
+                <CommandList className="max-h-[400px]">
+                  {filteredResults.contacts.length === 0 && filteredResults.deals.length === 0 ? (
+                    <CommandEmpty className="p-4 text-center text-xs text-slate-500">Aucun résultat trouvé.</CommandEmpty>
+                  ) : (
+                    <>
+                      {filteredResults.deals.length > 0 && (
+                        <CommandGroup heading="Affaires">
+                          {filteredResults.deals.map(deal => (
+                            <CommandItem key={deal.id} onSelect={() => handleResultClick("deal", deal.id)} className="cursor-pointer">
+                              <div className="flex items-center gap-2">
+                                <Briefcase className="w-3.5 h-3.5 text-green-600" />
+                                <span className="font-medium text-sm">{deal.title}</span>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      )}
+                      {filteredResults.contacts.length > 0 && (
+                        <CommandGroup heading="Contacts">
+                          {filteredResults.contacts.map(contact => (
+                            <CommandItem key={contact.id} onSelect={() => handleResultClick("contact", contact.id)} className="cursor-pointer">
+                              <div className="flex items-center gap-2">
+                                <UserIcon className="w-3.5 h-3.5 text-blue-600" />
+                                <span className="font-medium text-sm">{contact.firstName} {contact.lastName}</span>
+                                <span className="text-[10px] text-slate-400 uppercase ml-2">{contact.company}</span>
+                              </div>
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      )}
+                    </>
+                  )}
+                </CommandList>
+              </Command>
+            </PopoverContent>
+          </Popover>
         </div>
 
         <div className="flex items-center gap-3">
@@ -96,13 +208,20 @@ export default function Layout() {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80">
+            <DropdownMenuContent align="end" className="w-80 shadow-xl border-slate-100">
               <DropdownMenuLabel className="flex justify-between items-center">
                 Notifications
                 {unreadNotifications > 0 && (
-                  <Button variant="ghost" size="sm" className="text-xs h-auto py-1 px-2 text-green-600" onClick={() => {
-                    const updated = state.notifications.map(n => ({ ...n, read: true }));
-                    dispatch({ type: "UPDATE_NOTIFICATIONS", payload: updated });
+                  <Button variant="ghost" size="sm" className="text-xs h-auto py-1 px-2 text-green-600 hover:bg-green-50" onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      await db.markAllNotificationsAsRead(user.id);
+                      const updated = state.notifications.map(n => ({ ...n, read: true }));
+                      dispatch({ type: "UPDATE_NOTIFICATIONS", payload: updated });
+                      toast.success("Toutes les notifications sont lues");
+                    } catch (error) {
+                      toast.error("Erreur lors de la mise à jour");
+                    }
                   }}>
                     Tout marquer lu
                   </Button>
@@ -114,9 +233,15 @@ export default function Layout() {
                   <div className="p-4 text-center text-slate-500 text-sm italic">Aucune notification</div>
                 ) : (
                   state.notifications.slice(0, 10).map((n) => (
-                    <div key={n.id} className={`p-3 border-b last:border-0 text-sm ${!n.read ? 'bg-blue-50/50' : ''}`}>
-                      <p className={!n.read ? 'font-medium' : ''}>{n.message}</p>
-                      <span className="text-[10px] text-slate-400">il y a 2h</span>
+                    <div 
+                      key={n.id} 
+                      className={`p-3 border-b last:border-0 text-sm cursor-pointer hover:bg-slate-50 transition-colors ${!n.read ? 'bg-blue-50/50' : ''}`}
+                      onClick={() => handleNotificationClick(n)}
+                    >
+                      <p className={!n.read ? 'font-bold text-slate-900' : 'text-slate-600'}>{n.message}</p>
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        {formatDistanceToNow(new Date(n.created_at || n.createdAt), { addSuffix: true, locale: fr })}
+                      </span>
                     </div>
                   ))
                 )}
@@ -138,87 +263,68 @@ export default function Layout() {
                 </Avatar>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-56">
+            <DropdownMenuContent align="end" className="w-56 shadow-xl border-slate-100">
               <DropdownMenuLabel>Mon Compte</DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setIsSettingsOpen(true)}>
+              <DropdownMenuItem onClick={() => setIsSettingsOpen(true)} className="cursor-pointer">
                 <Settings className="w-4 h-4 mr-2" />
                 Paramètres
               </DropdownMenuItem>
               {isAdmin && (
-                <DropdownMenuItem onClick={() => setIsUsersOpen(true)}>
+                <DropdownMenuItem onClick={() => setIsUsersOpen(true)} className="cursor-pointer">
                   <Shield className="w-4 h-4 mr-2 text-green-600" />
                   Gestion Utilisateurs
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem onClick={() => handleLogout()}>
-                <UserIcon className="w-4 h-4 mr-2" />
-                Changer d'utilisateur
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem className="text-red-600" onClick={handleLogout}>
+              <DropdownMenuItem onClick={handleLogout} className="text-red-600 cursor-pointer">
                 <LogOut className="w-4 h-4 mr-2" />
-                Déconnexion
+                Se déconnecter
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col max-w-full overflow-hidden">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
-          <div className="bg-white border-b border-slate-200 px-6">
-            <TabsList className="h-12 bg-transparent p-0 gap-8">
-              <TabsTrigger value="pipeline" className="h-12 rounded-none border-b-2 border-transparent data-[state=active]:border-green-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-2 font-medium">
-                <KanbanSquare className="w-4 h-4 mr-2" />
-                Pipeline
+      <main className="flex-1 overflow-hidden flex flex-col">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+          <div className="bg-white border-b border-slate-200 px-6 flex items-center justify-between overflow-x-auto scrollbar-hide">
+            <TabsList className="h-12 bg-transparent gap-8 p-0">
+              <TabsTrigger value="pipeline" className="h-full rounded-none border-b-2 border-transparent data-[state=active]:border-green-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 gap-2 font-bold text-slate-500 data-[state=active]:text-green-700">
+                <KanbanSquare className="w-4 h-4" /> Pipeline
               </TabsTrigger>
-              <TabsTrigger value="contacts" className="h-12 rounded-none border-b-2 border-transparent data-[state=active]:border-green-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-2 font-medium">
-                <Users className="w-4 h-4 mr-2" />
-                Contacts
+              <TabsTrigger value="agenda" className="h-full rounded-none border-b-2 border-transparent data-[state=active]:border-green-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 gap-2 font-bold text-slate-500 data-[state=active]:text-green-700 relative">
+                <Calendar className="w-4 h-4" /> Agenda
+                {pendingProposals > 0 && <span className="absolute -top-1 -right-2 w-4 h-4 bg-amber-500 text-white text-[8px] flex items-center justify-center rounded-full border border-white font-bold">{pendingProposals}</span>}
               </TabsTrigger>
-              <TabsTrigger value="agenda" className="h-12 rounded-none border-b-2 border-transparent data-[state=active]:border-green-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-2 font-medium relative">
-                <Calendar className="w-4 h-4 mr-2" />
-                Agenda
-                {pendingProposals > 0 && (
-                  <span className="absolute -top-1 -right-2 bg-amber-400 text-amber-900 text-[10px] font-bold px-1.5 py-0.5 rounded-full ring-2 ring-white">
-                    {pendingProposals}
-                  </span>
-                )}
+              <TabsTrigger value="urgences" className="h-full rounded-none border-b-2 border-transparent data-[state=active]:border-green-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 gap-2 font-bold text-slate-500 data-[state=active]:text-green-700 relative">
+                <AlertTriangle className="w-4 h-4" /> Urgences
+                {emergenciesCount > 0 && <span className="absolute -top-1 -right-2 w-4 h-4 bg-red-600 text-white text-[8px] flex items-center justify-center rounded-full border border-white font-bold">{emergenciesCount}</span>}
               </TabsTrigger>
-              <TabsTrigger value="urgences" className="h-12 rounded-none border-b-2 border-transparent data-[state=active]:border-green-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-2 font-medium relative">
-                <AlertTriangle className="w-4 h-4 mr-2" />
-                Urgences
-                {emergenciesCount > 0 && (
-                  <span className="absolute -top-1 -right-2 bg-red-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded-full ring-2 ring-white">
-                    {emergenciesCount}
-                  </span>
-                )}
+              <TabsTrigger value="contacts" className="h-full rounded-none border-b-2 border-transparent data-[state=active]:border-green-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 gap-2 font-bold text-slate-500 data-[state=active]:text-green-700">
+                <Users className="w-4 h-4" /> Contacts
               </TabsTrigger>
-              <TabsTrigger value="stats" className="h-12 rounded-none border-b-2 border-transparent data-[state=active]:border-green-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-2 font-medium">
-                <BarChart3 className="w-4 h-4 mr-2" />
-                Statistiques
+              <TabsTrigger value="stats" className="h-full rounded-none border-b-2 border-transparent data-[state=active]:border-green-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 gap-2 font-bold text-slate-500 data-[state=active]:text-green-700">
+                <BarChart3 className="w-4 h-4" /> Stats
               </TabsTrigger>
             </TabsList>
           </div>
 
-          <div className="flex-1 overflow-auto bg-slate-50">
-            <TabsContent value="pipeline" className="m-0 h-full">
-              <PipelineView />
-            </TabsContent>
-            <TabsContent value="contacts" className="m-0 h-full p-6">
-              <ContactsView />
-            </TabsContent>
-            <TabsContent value="agenda" className="m-0 h-full p-6">
-              <AgendaView />
-            </TabsContent>
-            <TabsContent value="urgences" className="m-0 h-full p-6">
-              <UrgencesView />
-            </TabsContent>
-            <TabsContent value="stats" className="m-0 h-full p-6">
-              <StatsView />
-            </TabsContent>
-          </div>
+          <TabsContent value="pipeline" className="flex-1 mt-0 overflow-hidden">
+            <PipelineView jumpToId={searchJumpId} onJumpHandled={() => setSearchJumpId(null)} />
+          </TabsContent>
+          <TabsContent value="contacts" className="flex-1 mt-0 overflow-auto">
+            <ContactsView jumpToId={searchJumpId} onJumpHandled={() => setSearchJumpId(null)} />
+          </TabsContent>
+          <TabsContent value="agenda" className="flex-1 mt-0 overflow-hidden">
+            <AgendaView />
+          </TabsContent>
+          <TabsContent value="urgences" className="flex-1 mt-0 overflow-auto p-6">
+            <UrgencesView />
+          </TabsContent>
+          <TabsContent value="stats" className="flex-1 mt-0 overflow-auto p-6">
+            <StatsView />
+          </TabsContent>
         </Tabs>
       </main>
 

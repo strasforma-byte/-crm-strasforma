@@ -20,7 +20,12 @@ import {
   Tag,
   User,
   Fingerprint,
-  MapPin
+  MapPin,
+  CheckSquare,
+  Clock,
+  MessageSquare,
+  CheckCircle2,
+  X
 } from "lucide-react";
 import { 
   Select, 
@@ -30,9 +35,10 @@ import {
   SelectValue 
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { format } from "date-fns";
 
 export default function ContactSheet({ contact, open, onOpenChange, activeListId }) {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, refreshAllData } = useApp();
   const [isSaving, setIsSaving] = useState(false);
   
   const [formData, setFormData] = useState({
@@ -139,6 +145,10 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
     }));
   };
 
+  const [logType, setLogType] = useState(null); // 'call' | 'email' | null
+  const [logContent, setLogContent] = useState("");
+  const [isLogging, setIsLogging] = useState(false);
+
   const pipelines = Array.isArray(state.pipelines) ? state.pipelines : [];
   const linkedDeals = pipelines.flatMap(p => 
     (p.columns || []).flatMap(col => 
@@ -146,7 +156,95 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
     )
   );
 
+  const linkedTasks = (state.tasks || []).filter(t => 
+    t.contactId === contact?.id || t.linkedContactId === contact?.id
+  );
+
   const users = Array.isArray(state.users) ? state.users : [];
+
+  const handleLogInteraction = async () => {
+    if (!contact || !logContent.trim()) return;
+    setIsLogging(true);
+    try {
+      const newInteraction = {
+        id: "int-" + Date.now(),
+        type: logType,
+        content: logContent.trim(),
+        date: new Date().toISOString(),
+        userId: state.currentUser.id
+      };
+
+      const updatedContact = {
+        ...contact,
+        interactions: [newInteraction, ...(contact.interactions || [])]
+      };
+
+      await db.updateContact(contact.id, updatedContact);
+      
+      // Mirror in linked deals history
+      for (const deal of linkedDeals) {
+        const historyEntry = {
+          date: newInteraction.date,
+          userId: newInteraction.userId,
+          action: `${logType === 'call' ? '📞 Appel' : '📧 Email'} consigné : ${logContent.trim()}`
+        };
+        const updatedDeal = {
+          ...deal,
+          history: [historyEntry, ...(deal.history || [])]
+        };
+        await db.updateCard(deal.id, updatedDeal);
+      }
+
+      dispatch({ 
+        type: "UPDATE_CONTACTS", 
+        payload: state.contacts.map(c => c.id === contact.id ? updatedContact : c) 
+      });
+      
+      if (linkedDeals.length > 0) {
+        await refreshAllData();
+      }
+
+      toast.success("Interaction consignée");
+      setLogType(null);
+      setLogContent("");
+    } catch (error) {
+      console.error("Error logging interaction:", error);
+      toast.error("Erreur lors de la consignation");
+    } finally {
+      setIsLogging(false);
+    }
+  };
+
+  const handleCompleteTask = async (task) => {
+    try {
+      const updatedTasks = state.tasks.map(t => t.id === task.id ? { ...t, status: "done" } : t);
+      await db.updateTask(task.id, { ...task, status: "done" });
+      dispatch({ type: "UPDATE_TASKS", payload: updatedTasks });
+
+      // Audit automatique pour les affaires liées
+      if (task.linkedCardId) {
+        const pipeline = (Array.isArray(state.pipelines) ? state.pipelines : []).find(p => p.columns.some(col => col.cards.some(c => c.id === task.linkedCardId)));
+        if (pipeline) {
+          const card = pipeline.columns.flatMap(col => col.cards).find(c => c.id === task.linkedCardId);
+          if (card) {
+            const historyEntry = {
+              date: new Date().toISOString(),
+              userId: state.currentUser.id,
+              action: `Action terminée depuis la fiche contact : ${task.title}`
+            };
+            const updatedCard = { ...card, history: [historyEntry, ...(card.history || [])] };
+            await db.updateCard(card.id, updatedCard);
+            await refreshAllData();
+          }
+        }
+      }
+
+      toast.success("Action terminée !");
+    } catch (error) {
+      console.error("Error completing task:", error);
+      toast.error("Erreur lors de la mise à jour");
+    }
+  };
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -270,6 +368,47 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
               </div>
             )}
 
+            {/* Actions liées */}
+            {contact && linkedTasks.length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-slate-900 font-bold uppercase text-xs tracking-wider">
+                  <CheckSquare className="w-4 h-4" />
+                  Actions & Tâches
+                </div>
+                <div className="space-y-2">
+                  {[...linkedTasks]
+                    .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate))
+                    .map(task => (
+                    <div key={task.id} className="p-2 bg-slate-50 border rounded-lg flex items-center gap-3 group">
+                      <div className={`p-1.5 rounded-full ${task.status === 'done' ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
+                        <Clock className="w-3.5 h-3.5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className={`text-[13px] font-bold truncate ${task.status === 'done' ? 'line-through text-slate-400' : 'text-slate-700'}`}>
+                          {task.title}
+                        </p>
+                        <p className="text-[10px] text-slate-500 font-medium">
+                          {format(new Date(task.dueDate), "dd/MM/yyyy")} à {task.time}
+                        </p>
+                      </div>
+                      {task.status === 'done' ? (
+                        <Badge className="bg-green-600 text-[9px] h-4 text-white border-none">Fait</Badge>
+                      ) : (
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="h-7 w-7 text-green-600 opacity-0 group-hover:opacity-100 transition-opacity p-0 hover:bg-green-50"
+                          onClick={() => handleCompleteTask(task)}
+                        >
+                          <CheckCircle2 className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Notes */}
             <div className="space-y-4">
               <Label>Notes libres</Label>
@@ -280,6 +419,89 @@ export default function ContactSheet({ contact, open, onOpenChange, activeListId
                 onChange={e => setFormData({...formData, notes: e.target.value})}
               />
             </div>
+
+            {/* Consigner une interaction */}
+            {contact && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-slate-900 font-bold uppercase text-xs tracking-wider">
+                  <MessageSquare className="w-4 h-4" />
+                  Consigner un événement
+                </div>
+                
+                {!logType ? (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="text-[11px] h-8 border-blue-100 text-blue-600 hover:bg-blue-50 font-bold"
+                      onClick={() => setLogType("call")}
+                    >
+                      <Phone className="w-3 h-3 mr-1.5" /> Appel passé
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="text-[11px] h-8 border-purple-100 text-purple-600 hover:bg-purple-50 font-bold"
+                      onClick={() => setLogType("email")}
+                    >
+                      <Mail className="w-3 h-3 mr-1.5" /> Email envoyé
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3 p-3 bg-slate-50 rounded-xl border border-slate-100 animate-in zoom-in-95">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[10px] font-black uppercase text-slate-400">
+                        Détails de {logType === 'call' ? "l'appel" : "l'email"}
+                      </span>
+                      <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setLogType(null)}>
+                        <X className="w-3 h-3" />
+                      </Button>
+                    </div>
+                    <Textarea 
+                      autoFocus
+                      placeholder={logType === 'call' ? "Bilan de l'appel..." : "Objet ou contenu de l'email..."}
+                      className="min-h-[60px] text-xs bg-white border-slate-200"
+                      value={logContent}
+                      onChange={(e) => setLogContent(e.target.value)}
+                    />
+                    <div className="flex justify-end gap-2">
+                      <Button variant="ghost" size="sm" className="h-7 text-xs font-bold" onClick={() => setLogType(null)}>Annuler</Button>
+                      <Button 
+                        size="sm" 
+                        className={`h-7 text-xs text-white font-bold ${logType === 'call' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-purple-600 hover:bg-purple-700'}`}
+                        onClick={handleLogInteraction}
+                        disabled={isLogging || !logContent.trim()}
+                      >
+                        {isLogging ? "Enregistrement..." : "Enregistrer"}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Historique des interactions */}
+            {contact && (contact.interactions || []).length > 0 && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-slate-900 font-bold uppercase text-xs tracking-wider">
+                  <History className="w-4 h-4" />
+                  Historique Contact
+                </div>
+                <div className="space-y-3 pl-4 border-l-2 border-slate-100">
+                  {contact.interactions.slice(0, 10).map((int, i) => (
+                    <div key={i} className="text-[11px] relative">
+                      <div className="absolute -left-[21px] top-0.5 bg-white p-0.5">
+                        <CheckCircle2 className="w-3 h-3 text-green-500" />
+                      </div>
+                      <p className="font-bold text-slate-900">
+                        {format(new Date(int.date), "dd/MM HH:mm")} — {int.type === 'call' ? '📞 Appel' : '📧 Email'}
+                      </p>
+                      <p className="text-slate-500 italic mt-0.5">"{int.content}"</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </ScrollArea>
 

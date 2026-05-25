@@ -18,7 +18,8 @@ import {
   Building2, 
   ChevronsUpDown, 
   Fingerprint,
-  User as UserIcon
+  User as UserIcon,
+  Briefcase
 } from "lucide-react";
 import { 
   Command, 
@@ -120,48 +121,178 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
     }
 
     try {
+      const taskDate = new Date(formData.date);
+      const [hours, minutes] = formData.time.split(":").map(Number);
+      taskDate.setHours(hours, minutes);
+
+      // Sécurité : s'assurer qu'un utilisateur est assigné
+      const assignedUserId = formData.userId || state.currentUser?.id;
+      if (!assignedUserId) {
+        toast.error("Impossible d'identifier l'utilisateur responsable");
+        return;
+      }
+
       const taskData = {
         title: formData.title,
+        type: formData.type,
         description: formData.notes,
-        dueDate: new Date(formData.date.setHours(...formData.time.split(":").map(Number))).toISOString(),
+        dueDate: taskDate.toISOString(),
         status: formData.status,
-        assignedTo: formData.userId,
-        contactId: formData.linkedContactId === "none" ? null : formData.linkedContactId,
-        linkedCardId: formData.linkedCardId === "none" ? null : formData.linkedCardId
+        assignedTo: assignedUserId,
+        contactId: formData.linkedContactId,
+        linkedCardId: formData.linkedCardId
       };
 
       if (task) {
-        await db.updateTask(task.id, taskData);
-        const updated = state.tasks.map(t => t.id === task.id ? { ...t, ...taskData, date: format(new Date(taskData.dueDate), "yyyy-MM-dd"), time: formData.time } : t);
+        const savedTask = await db.updateTask(task.id, taskData);
+        const updated = state.tasks.map(t => t.id === task.id ? savedTask : t);
         dispatch({ type: "UPDATE_TASKS", payload: updated });
         toast.success("Action mise à jour");
       } else {
         const savedTask = await db.insertTask(taskData);
-        dispatch({ type: "UPDATE_TASKS", payload: [...state.tasks, { ...savedTask, linkedCardId: taskData.linkedCardId }] });
+        dispatch({ type: "UPDATE_TASKS", payload: [...state.tasks, savedTask] });
+
+        // Audit automatique pour les nouvelles tâches liées
+        if (taskData.linkedCardId) {
+          const pipeline = (Array.isArray(state.pipelines) ? state.pipelines : []).find(p => p.columns.some(col => col.cards.some(c => c.id === taskData.linkedCardId)));
+          if (pipeline) {
+            const card = pipeline.columns.flatMap(col => col.cards).find(c => c.id === taskData.linkedCardId);
+            if (card) {
+              const historyEntry = {
+                date: new Date().toISOString(),
+                userId: assignedUserId,
+                action: `Nouvelle action planifiée : ${taskData.title}`
+              };
+              const updatedCard = { ...card, history: [historyEntry, ...(card.history || [])] };
+              await db.updateCard(card.id, updatedCard);
+              
+              const updatedPipelines = state.pipelines.map(p => p.id === pipeline.id ? {
+                ...p,
+                columns: p.columns.map(col => ({
+                  ...col,
+                  cards: col.cards.map(c => c.id === card.id ? updatedCard : c)
+                }))
+              } : p);
+              dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+            }
+          }
+        }
+
         toast.success("Action planifiée");
       }
       onOpenChange(false);
     } catch (error) {
-      toast.error("Erreur lors de l'enregistrement de la tâche");
+      console.error("Error saving task:", error);
+      const msg = error.message || "Problème de connexion";
+      toast.error(`Erreur lors de l'enregistrement : ${msg}`);
     }
   };
 
-  const handleDelete = () => {
-    // In a real app, delete from DB too
-    const updated = state.tasks.filter(t => t.id !== task.id);
-    dispatch({ type: "UPDATE_TASKS", payload: updated });
-    toast.success("Tâche supprimée");
-    onOpenChange(false);
+  const handleDelete = async () => {
+    if (!task) return;
+    
+    try {
+      // 1. Delete from DB
+      await db.deleteTask(task.id);
+
+      // 2. Update local state
+      const updated = state.tasks.filter(t => t.id !== task.id);
+      dispatch({ type: "UPDATE_TASKS", payload: updated });
+
+      // 3. If linked to a card, update its history
+      if (task.linkedCardId) {
+        const pipeline = (Array.isArray(state.pipelines) ? state.pipelines : []).find(p => p.columns.some(col => col.cards.some(c => c.id === task.linkedCardId)));
+        if (pipeline) {
+          const card = pipeline.columns.flatMap(col => col.cards).find(c => c.id === task.linkedCardId);
+          if (card) {
+            const historyEntry = {
+              date: new Date().toISOString(),
+              userId: state.currentUser.id,
+              action: `Action supprimée : ${task.title}`
+            };
+            const updatedCard = {
+              ...card,
+              history: [historyEntry, ...(card.history || [])]
+            };
+            await db.updateCard(card.id, updatedCard);
+            
+            const updatedPipelines = state.pipelines.map(p => {
+              if (p.id === pipeline.id) {
+                return {
+                  ...p,
+                  columns: p.columns.map(col => ({
+                    ...col,
+                    cards: col.cards.map(c => c.id === card.id ? updatedCard : c)
+                  }))
+                };
+              }
+              return p;
+            });
+            dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+          }
+        }
+      }
+
+      toast.success("Tâche supprimée");
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Error deleting task:", error);
+      toast.error("Erreur lors de la suppression de la tâche");
+    }
   };
 
-  const handleToggleStatus = () => {
+  const handleToggleStatus = async () => {
     const newStatus = formData.status === "done" ? "pending" : "done";
     setFormData({...formData, status: newStatus});
-    if (task) {
-      const updated = state.tasks.map(t => t.id === task.id ? { ...t, status: newStatus } : t);
-      dispatch({ type: "UPDATE_TASKS", payload: updated });
-      toast.success(newStatus === "done" ? "Tâche terminée !" : "Tâche réouverte");
-      onOpenChange(false);
+    
+    try {
+      if (task) {
+        const updatedTaskData = { ...task, status: newStatus };
+        await db.updateTask(task.id, updatedTaskData);
+        
+        const updatedTasks = state.tasks.map(t => t.id === task.id ? { ...t, status: newStatus } : t);
+        dispatch({ type: "UPDATE_TASKS", payload: updatedTasks });
+
+        // If linked to a card, update its history
+        if (task.linkedCardId) {
+          const pipeline = (Array.isArray(state.pipelines) ? state.pipelines : []).find(p => p.columns.some(col => col.cards.some(c => c.id === task.linkedCardId)));
+          if (pipeline) {
+            const card = pipeline.columns.flatMap(col => col.cards).find(c => c.id === task.linkedCardId);
+            if (card) {
+              const historyEntry = {
+                date: new Date().toISOString(),
+                userId: state.currentUser.id,
+                action: newStatus === "done" ? `Action terminée : ${task.title}` : `Action réouverte : ${task.title}`
+              };
+              const updatedCard = {
+                ...card,
+                history: [historyEntry, ...(card.history || [])]
+              };
+              await db.updateCard(card.id, updatedCard);
+              
+              const updatedPipelines = state.pipelines.map(p => {
+                if (p.id === pipeline.id) {
+                  return {
+                    ...p,
+                    columns: p.columns.map(col => ({
+                      ...col,
+                      cards: col.cards.map(c => c.id === card.id ? updatedCard : c)
+                    }))
+                  };
+                }
+                return p;
+              });
+              dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+            }
+          }
+        }
+
+        toast.success(newStatus === "done" ? "Tâche terminée !" : "Tâche réouverte");
+        onOpenChange(false);
+      }
+    } catch (error) {
+      console.error("Error toggling task status:", error);
+      toast.error("Erreur lors de la mise à jour de la tâche");
     }
   };
 

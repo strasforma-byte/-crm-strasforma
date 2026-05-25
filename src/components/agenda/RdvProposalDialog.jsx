@@ -31,7 +31,7 @@ import { toast } from "sonner";
 import { db } from "@/lib/db";
 
 export default function RdvProposalDialog({ open, onOpenChange, commercialId, defaultDate }) {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, refreshAllData } = useApp();
   
   const [formData, setFormData] = useState({
     title: "",
@@ -53,7 +53,7 @@ export default function RdvProposalDialog({ open, onOpenChange, commercialId, de
       setFormData({
         title: "",
         commercialId: commercialId || state.users.find(u => u.role === "commercial")?.id || "",
-        linkedContactId: state.contacts[0]?.id || "",
+        linkedContactId: state.contacts[0]?.id || "none",
         linkedCardId: "none",
         proposedDate: defaultDate || new Date(),
         proposedTime: "10:00",
@@ -100,45 +100,69 @@ export default function RdvProposalDialog({ open, onOpenChange, commercialId, de
     }
   };
 
-  const handlePropose = () => {
+  const handlePropose = async () => {
     if (!formData.title || !formData.commercialId || !formData.linkedContactId) {
       toast.error("Veuillez remplir les informations essentielles");
       return;
     }
 
-    const propDate = new Date(formData.proposedDate);
-    const [h, m] = formData.proposedTime.split(":").map(Number);
-    propDate.setHours(h, m);
+    try {
+      const propDate = new Date(formData.proposedDate);
+      const [h, m] = formData.proposedTime.split(":").map(Number);
+      propDate.setHours(h, m);
 
-    const newProposal = {
-      id: "prop-" + Date.now(),
-      prospectorId: state.currentUser.id,
-      commercialId: formData.commercialId,
-      title: formData.title,
-      linkedContactId: formData.linkedContactId,
-      linkedCardId: formData.linkedCardId === "none" ? null : formData.linkedCardId,
-      proposedDate: propDate.toISOString(),
-      duration: parseInt(formData.duration),
-      notes: formData.notes,
-      status: "pending",
-      createdAt: new Date().toISOString()
-    };
+      const newProposalData = {
+        prospectorId: state.currentUser.id,
+        commercialId: formData.commercialId,
+        title: formData.title,
+        linkedContactId: formData.linkedContactId,
+        linkedCardId: formData.linkedCardId === "none" ? null : formData.linkedCardId,
+        proposedDate: propDate.toISOString(),
+        duration: parseInt(formData.duration),
+        notes: formData.notes,
+        status: "pending"
+      };
 
-    const newNotif = {
-      id: "n" + Date.now(),
-      userId: formData.commercialId,
-      type: "rdv_proposal",
-      message: `${state.currentUser.name} vous propose un RDV : ${formData.title}`,
-      relatedId: newProposal.id,
-      read: false,
-      createdAt: new Date().toISOString()
-    };
+      const savedProposal = await db.insertProposal(newProposalData);
 
-    dispatch({ type: "UPDATE_PROPOSALS", payload: [...state.rdvProposals, newProposal] });
-    dispatch({ type: "UPDATE_NOTIFICATIONS", payload: [...state.notifications, newNotif] });
-    
-    toast.success("Proposition de RDV envoyée !");
-    onOpenChange(false);
+      // Audit automatique pour l'affaire liée
+      if (newProposalData.linkedCardId) {
+        const pipeline = (Array.isArray(state.pipelines) ? state.pipelines : []).find(p => p.columns.some(col => col.cards.some(c => c.id === newProposalData.linkedCardId)));
+        if (pipeline) {
+          const card = pipeline.columns.flatMap(col => col.cards).find(c => c.id === newProposalData.linkedCardId);
+          if (card) {
+            const historyEntry = {
+              date: new Date().toISOString(),
+              userId: state.currentUser.id,
+              action: `Proposition de RDV créée : ${formData.title}`
+            };
+            const updatedCard = { ...card, history: [historyEntry, ...(card.history || [])] };
+            await db.updateCard(card.id, updatedCard);
+            // Refresh to ensure history is updated in state
+            await refreshAllData();
+          }
+        }
+      }
+
+      const newNotifData = {
+        userId: formData.commercialId,
+        type: "rdv_proposal",
+        message: `${state.currentUser.name} vous propose un RDV : ${formData.title}`,
+        relatedId: savedProposal.id,
+        read: false
+      };
+
+      const savedNotif = await db.insertNotification(newNotifData);
+
+      dispatch({ type: "UPDATE_PROPOSALS", payload: [...state.rdvProposals, savedProposal] });
+      dispatch({ type: "UPDATE_NOTIFICATIONS", payload: [...state.notifications, savedNotif] });
+      
+      toast.success("Proposition de RDV envoyée !");
+      onOpenChange(false);
+    } catch (error) {
+      console.error("Error sending proposal:", error);
+      toast.error("Erreur lors de l'envoi de la proposition");
+    }
   };
 
   return (

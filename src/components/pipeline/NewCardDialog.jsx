@@ -11,8 +11,6 @@ import { format } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Switch } from "@/components/ui/switch";
 import { 
-  CheckSquare, 
-  Calendar as CalendarIcon, 
   Building2, 
   User as UserIcon, 
   Euro, 
@@ -32,7 +30,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { db } from "@/lib/db";
 
-export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, defaultContactId }) {
+export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, defaultContactId, defaultColumnId }) {
   const { state, dispatch } = useApp();
   
   const [formData, setFormData] = useState({
@@ -40,17 +38,8 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
     clientId: "",
     value: "",
     pipelineId: defaultPipelineId || "",
-    columnId: "",
+    columnId: defaultColumnId || "",
     responsibleId: state.currentUser?.id || ""
-  });
-
-  const [createTask, setCreateTask] = useState(false);
-  const [taskData, setTaskData] = useState({
-    title: "Appel de découverte",
-    type: "call",
-    date: new Date(),
-    time: "09:00",
-    duration: "30"
   });
 
   const [isQuickContactOpen, setIsQuickContactOpen] = useState(false);
@@ -61,24 +50,40 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
     if (open) {
       const pipeId = defaultPipelineId || (state.pipelines && state.pipelines[0]?.id) || "";
       const pipeline = state.pipelines?.find(p => p.id === pipeId);
+      
+      // Auto-assign based on defaultContactId if provided
+      let initialResponsibleId = state.currentUser?.id || "";
+      if (defaultContactId) {
+        const contact = state.contacts.find(c => c.id === defaultContactId);
+        if (contact?.assignedAgentId) {
+          initialResponsibleId = contact.assignedAgentId;
+        }
+      }
+
       setFormData({
         title: "",
         clientId: defaultContactId || "",
         value: "",
         pipelineId: pipeId,
-        columnId: (pipeline && pipeline.columns && pipeline.columns[0]?.id) || "",
-        responsibleId: state.currentUser?.id || ""
-      });
-      setCreateTask(false);
-      setTaskData({
-        title: "Appel de découverte",
-        type: "call",
-        date: new Date(),
-        time: "09:00",
-        duration: "30"
+        columnId: defaultColumnId || (pipeline && pipeline.columns && pipeline.columns[0]?.id) || "",
+        responsibleId: initialResponsibleId
       });
     }
-  }, [open, defaultPipelineId, defaultContactId, state.pipelines, state.currentUser]);
+  }, [open, defaultPipelineId, defaultContactId, defaultColumnId, state.pipelines, state.currentUser, state.contacts]);
+
+  // Intelligent Auto-Assignment when clientId changes manually
+  useEffect(() => {
+    if (formData.clientId) {
+      const contact = state.contacts.find(c => c.id === formData.clientId);
+      if (contact?.assignedAgentId && contact.assignedAgentId !== formData.responsibleId) {
+        setFormData(prev => ({ ...prev, responsibleId: contact.assignedAgentId }));
+        toast.info(`Responsable auto-assigné : ${state.users.find(u => u.id === contact.assignedAgentId)?.name}`, {
+          description: "Le responsable de l'affaire a été synchronisé avec le responsable du contact.",
+          duration: 3000
+        });
+      }
+    }
+  }, [formData.clientId, state.contacts, state.users]);
 
   const handleQuickContactCreate = async () => {
     if (!quickContact.lastName || !quickContact.company || !quickContact.siret) {
@@ -133,9 +138,13 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
         contactId: formData.clientId,
         title: formData.title,
         value: parseFloat(formData.value) || 0,
+        responsibleId: formData.responsibleId,
         priority: "medium",
         tags: [],
-        order: 0 
+        order: 0,
+        history: [
+          { date: new Date().toISOString(), userId: state.currentUser.id, action: "Affaire créée" }
+        ]
       };
 
       const savedCard = await db.insertCard(newCardData);

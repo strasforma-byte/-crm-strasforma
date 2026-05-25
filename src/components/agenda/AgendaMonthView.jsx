@@ -1,11 +1,15 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameMonth, isSameDay, isToday } from "date-fns";
 import { fr } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Phone, Mail, Handshake, Bell, Bookmark, Briefcase } from "lucide-react";
+import { Phone, Mail, Handshake, Bell, Bookmark, Briefcase, Check, CheckCircle2 } from "lucide-react";
+import { useApp } from "@/context/AppContext";
+import { db } from "@/lib/db";
+import { toast } from "sonner";
 
 export default function AgendaMonthView({ tasks, proposals, onTaskClick, onProposalClick }) {
+  const { state, dispatch, refreshAllData } = useApp();
   const today = new Date();
   const monthStart = startOfMonth(today);
   const monthEnd = endOfMonth(monthStart);
@@ -16,6 +20,38 @@ export default function AgendaMonthView({ tasks, proposals, onTaskClick, onPropo
     start: startDate,
     end: endDate,
   });
+
+  const handleComplete = async (e, task) => {
+    e.stopPropagation();
+    try {
+      const updatedTasks = state.tasks.map(t => t.id === task.id ? { ...t, status: "done" } : t);
+      await db.updateTask(task.id, { ...task, status: "done" });
+      dispatch({ type: "UPDATE_TASKS", payload: updatedTasks });
+
+      // Audit automatique pour les affaires liées
+      if (task.linkedCardId) {
+        const pipeline = (Array.isArray(state.pipelines) ? state.pipelines : []).find(p => p.columns?.some(col => col.cards?.some(c => c.id === task.linkedCardId)));
+        if (pipeline) {
+          const card = pipeline.columns.flatMap(col => col.cards).find(c => c.id === task.linkedCardId);
+          if (card) {
+            const historyEntry = {
+              date: new Date().toISOString(),
+              userId: state.currentUser.id,
+              action: `Action terminée depuis le calendrier : ${task.title}`
+            };
+            const updatedCard = { ...card, history: [historyEntry, ...(card.history || [])] };
+            await db.updateCard(card.id, updatedCard);
+            await refreshAllData();
+          }
+        }
+      }
+
+      toast.success("Action terminée !");
+    } catch (error) {
+      console.error("Error completing task:", error);
+      toast.error("Erreur lors de la mise à jour");
+    }
+  };
 
   const getTaskIcon = (type) => {
     switch (type) {
@@ -70,14 +106,23 @@ export default function AgendaMonthView({ tasks, proposals, onTaskClick, onPropo
 
               <div className="flex-1 space-y-1 overflow-hidden">
                 {dayTasks.slice(0, 3).map(task => (
-                  <button
-                    key={task.id}
-                    onClick={() => onTaskClick(task)}
-                    className={`w-full text-left px-1.5 py-0.5 rounded text-[9px] text-white flex items-center gap-1 truncate ${getTaskColor(task.type)} ${task.status === 'done' ? 'opacity-50' : ''}`}
-                  >
-                    {task.linkedCardId ? <Briefcase className="w-2 h-2 shrink-0" /> : getTaskIcon(task.type)}
-                    <span className="truncate">{task.title}</span>
-                  </button>
+                  <div key={task.id} className="group relative">
+                    <button
+                      onClick={() => onTaskClick(task)}
+                      className={`w-full text-left px-1.5 py-0.5 rounded text-[9px] text-white flex items-center gap-1 truncate ${getTaskColor(task.type)} ${task.status === 'done' ? 'opacity-50' : ''}`}
+                    >
+                      {task.linkedCardId ? <Briefcase className="w-2 h-2 shrink-0" /> : getTaskIcon(task.type)}
+                      <span className="truncate">{task.title}</span>
+                    </button>
+                    {task.status !== 'done' && (
+                      <button 
+                        className="absolute right-0 top-0 h-full px-1 bg-white/20 hover:bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-r"
+                        onClick={(e) => handleComplete(e, task)}
+                      >
+                        <Check className="w-2.5 h-2.5 text-white" />
+                      </button>
+                    )}
+                  </div>
                 ))}
                 
                 {dayProposals.slice(0, 2).map(prop => (
@@ -101,10 +146,18 @@ export default function AgendaMonthView({ tasks, proposals, onTaskClick, onPropo
                       <div className="space-y-1">
                         <p className="text-xs font-bold mb-2 pb-1 border-b">{format(day, "dd MMMM", { locale: fr })}</p>
                         {dayTasks.map(task => (
-                          <div key={task.id} className={`flex items-center gap-2 p-1 rounded hover:bg-slate-50 cursor-pointer`} onClick={() => onTaskClick(task)}>
+                          <div key={task.id} className="group relative flex items-center gap-2 p-1 rounded hover:bg-slate-50 cursor-pointer" onClick={() => onTaskClick(task)}>
                             <div className={`w-2 h-2 rounded-full ${getTaskColor(task.type)}`} />
                             <span className="text-xs truncate">{task.title}</span>
                             <span className="text-[10px] text-slate-400 ml-auto">{task.time}</span>
+                            {task.status !== 'done' && (
+                              <button 
+                                className="ml-2 p-1 text-slate-300 hover:text-green-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                onClick={(e) => handleComplete(e, task)}
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>

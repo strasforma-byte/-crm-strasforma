@@ -22,20 +22,31 @@ export default function SettingsDialog({ open, onOpenChange }) {
 
   if (!user) return null;
 
-  const handleSave = () => {
-    const updatedUser = {
-      ...user,
-      name,
-      color,
-      settings: { ...user.settings, shareAgendaWithProspectors: shareAgenda }
-    };
+  const handleSave = async () => {
+    try {
+      const updatedProfile = {
+        name,
+        color,
+        settings: { ...user.settings, shareAgendaWithProspectors: shareAgenda }
+      };
 
-    const updatedUsers = state.users.map(u => u.id === user.id ? updatedUser : u);
-    dispatch({ type: "UPDATE_USERS", payload: updatedUsers });
-    dispatch({ type: "SET_CURRENT_USER", payload: updatedUser });
-    
-    onOpenChange(false);
-    toast.success("Paramètres enregistrés");
+      await db.updateUserProfile(user.id, updatedProfile);
+      
+      const updatedUser = {
+        ...user,
+        ...updatedProfile
+      };
+
+      const updatedUsers = state.users.map(u => u.id === user.id ? updatedUser : u);
+      dispatch({ type: "UPDATE_USERS", payload: updatedUsers });
+      dispatch({ type: "SET_CURRENT_USER", payload: updatedUser });
+      
+      onOpenChange(false);
+      toast.success("Paramètres enregistrés");
+    } catch (error) {
+      console.error("Error updating settings:", error);
+      toast.error("Erreur lors de l'enregistrement des paramètres");
+    }
   };
 
   const handleExport = () => {
