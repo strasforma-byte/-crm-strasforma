@@ -3,7 +3,7 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInte
 import { fr } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Phone, Mail, Handshake, Bell, Bookmark } from "lucide-react";
+import { Phone, Mail, Handshake, Bell, Bookmark, Briefcase } from "lucide-react";
 
 export default function AgendaMonthView({ tasks, proposals, onTaskClick, onProposalClick }) {
   const today = new Date();
@@ -75,7 +75,7 @@ export default function AgendaMonthView({ tasks, proposals, onTaskClick, onPropo
                     onClick={() => onTaskClick(task)}
                     className={`w-full text-left px-1.5 py-0.5 rounded text-[9px] text-white flex items-center gap-1 truncate ${getTaskColor(task.type)} ${task.status === 'done' ? 'opacity-50' : ''}`}
                   >
-                    {getTaskIcon(task.type)}
+                    {task.linkedCardId ? <Briefcase className="w-2 h-2 shrink-0" /> : getTaskIcon(task.type)}
                     <span className="truncate">{task.title}</span>
                   </button>
                 ))}

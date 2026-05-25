@@ -126,18 +126,19 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
         dueDate: new Date(formData.date.setHours(...formData.time.split(":").map(Number))).toISOString(),
         status: formData.status,
         assignedTo: formData.userId,
-        contactId: formData.linkedContactId === "none" ? null : formData.linkedContactId
+        contactId: formData.linkedContactId === "none" ? null : formData.linkedContactId,
+        linkedCardId: formData.linkedCardId === "none" ? null : formData.linkedCardId
       };
 
       if (task) {
         await db.updateTask(task.id, taskData);
         const updated = state.tasks.map(t => t.id === task.id ? { ...t, ...taskData, date: format(new Date(taskData.dueDate), "yyyy-MM-dd"), time: formData.time } : t);
         dispatch({ type: "UPDATE_TASKS", payload: updated });
-        toast.success("Tâche mise à jour");
+        toast.success("Action mise à jour");
       } else {
         const savedTask = await db.insertTask(taskData);
-        dispatch({ type: "UPDATE_TASKS", payload: [...state.tasks, savedTask] });
-        toast.success("Tâche créée");
+        dispatch({ type: "UPDATE_TASKS", payload: [...state.tasks, { ...savedTask, linkedCardId: taskData.linkedCardId }] });
+        toast.success("Action planifiée");
       }
       onOpenChange(false);
     } catch (error) {

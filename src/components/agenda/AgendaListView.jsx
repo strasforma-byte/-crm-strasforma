@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Card } from "@/components/ui/card";
-import { Phone, Mail, Handshake, Bell, Bookmark, Clock, CheckCircle2 } from "lucide-react";
+import { Phone, Mail, Handshake, Bell, Bookmark, Clock, CheckCircle2, Briefcase } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 
 export default function AgendaListView({ tasks, proposals, onTaskClick, onProposalClick }) {
@@ -77,6 +77,12 @@ export default function AgendaListView({ tasks, proposals, onTaskClick, onPropos
                             <span className="text-xs text-blue-600 flex items-center">
                               <UserIcon className="w-3 h-3 mr-1" />
                               {state.contacts.find(c => c.id === task.linkedContactId)?.firstName} {state.contacts.find(c => c.id === task.linkedContactId)?.lastName}
+                            </span>
+                          )}
+                          {task.linkedCardId && (
+                            <span className="text-xs text-green-600 flex items-center">
+                              <Briefcase className="w-3 h-3 mr-1" />
+                              {state.pipelines.flatMap(p => p.columns.flatMap(col => col.cards)).find(c => c.id === task.linkedCardId)?.title}
                             </span>
                           )}
                         </div>

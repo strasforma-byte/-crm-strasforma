@@ -49,9 +49,6 @@ const mapCard = (card) => ({
   contactId: card.contact_id,
   responsibleId: card.responsible_id,
   notes: card.notes,
-  nextAction: card.next_action,
-  nextActionDate: card.next_action_date,
-  nextActionType: card.next_action_type || 'call',
   columnId: card.column_id
 })
 
@@ -64,9 +61,6 @@ const toDbCard = (card) => ({
   priority: card.priority,
   tags: card.tags,
   notes: card.notes,
-  next_action: card.nextAction,
-  next_action_date: card.nextActionDate,
-  next_action_type: card.nextActionType,
   "order": card.order || 0
 })
 
@@ -294,9 +288,13 @@ export const db = {
       title: t.title,
       description: t.description,
       dueDate: t.due_date,
+      date: t.due_date ? t.due_date.split('T')[0] : null,
       status: t.status,
       assignedTo: t.assigned_to,
+      userId: t.assigned_to,
       contactId: t.contact_id,
+      linkedContactId: t.contact_id,
+      linkedCardId: t.linked_card_id,
       createdAt: t.created_at
     }))
   },
@@ -308,17 +306,39 @@ export const db = {
       due_date: task.dueDate,
       status: task.status,
       assigned_to: task.assignedTo,
-      contact_id: task.contactId
+      contact_id: task.contactId,
+      linked_card_id: task.linkedCardId
     }).select().single()
+    if (error) throw error
+    return {
+      ...data,
+      id: data.id,
+      title: data.title,
+      description: data.description,
+      dueDate: data.due_date,
+      date: data.due_date ? data.due_date.split('T')[0] : null,
+      status: data.status,
+      assignedTo: data.assigned_to,
+      userId: data.assigned_to,
+      contactId: data.contact_id,
+      linkedContactId: data.contact_id,
+      linkedCardId: data.linked_card_id
+    }
+  },
+
+  async updateTask(id, task) {
+    const { data, error } = await supabase.from('tasks').update({
+      title: task.title,
+      description: task.description,
+      due_date: task.dueDate,
+      status: task.status,
+      assigned_to: task.assignedTo,
+      contact_id: task.contactId,
+      linked_card_id: task.linkedCardId
+    }).eq('id', id).select().single()
     if (error) throw error
     return data
   },
-
-  // Proposals
-  async getProposals() {
-    const { data, error } = await supabase.from('rdv_proposals').select('*')
-    if (error) throw error
-    return data.map(p => ({
       id: p.id,
       contactId: p.contact_id,
       agentId: p.agent_id,

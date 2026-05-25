@@ -36,13 +36,28 @@ export default function KanbanCard({ card, onClick, isOverlay }) {
   );
   const responsible = state.users.find(u => u.id === card.responsibleId);
 
-  // Status bar logic
+  // Unified Task Logic: Get the earliest pending task linked to this card
+  const nextTask = useMemo(() => {
+    const cardTasks = state.tasks.filter(t => t.linkedCardId === card.id && t.status !== "done");
+    if (cardTasks.length === 0) return null;
+    return cardTasks.sort((a, b) => new Date(a.date) - new Date(b.date))[0];
+  }, [state.tasks, card.id]);
+
+  // Status bar logic based on nextTask
   const getStatusColor = () => {
-    if (!card.nextActionDate) return "bg-yellow-500";
+    if (!nextTask) return "bg-yellow-500";
     const now = new Date();
-    const actionDate = new Date(card.nextActionDate);
-    if (actionDate < now) return "bg-red-500";
+    const actionDate = new Date(nextTask.date);
+    if (actionDate < now && !isToday(actionDate)) return "bg-red-500";
+    if (isToday(actionDate)) return "bg-orange-500";
     return "bg-green-500";
+  };
+
+  const isToday = (date) => {
+    const today = new Date();
+    return date.getDate() === today.getDate() &&
+      date.getMonth() === today.getMonth() &&
+      date.getFullYear() === today.getFullYear();
   };
 
   return (
@@ -97,11 +112,14 @@ export default function KanbanCard({ card, onClick, isOverlay }) {
 
         <div className="pt-2 border-t border-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-1 text-[10px] text-slate-400">
-            {card.nextActionDate ? (
-              <>
+            {nextTask ? (
+              <div className={cn("flex items-center gap-1", 
+                new Date(nextTask.date) < new Date() && !isToday(new Date(nextTask.date)) ? "text-red-500 font-bold" : 
+                isToday(new Date(nextTask.date)) ? "text-orange-500 font-bold" : ""
+              )}>
                 <Clock className="w-3 h-3" />
-                <span>{new Date(card.nextActionDate).toLocaleDateString()}</span>
-              </>
+                <span>{new Date(nextTask.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
+              </div>
             ) : (
               <div className="flex items-center text-amber-500">
                 <AlertTriangle className="w-3 h-3 mr-1" />

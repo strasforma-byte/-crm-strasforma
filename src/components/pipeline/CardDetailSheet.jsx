@@ -49,10 +49,6 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
     value: 0,
     responsibleId: "",
     columnId: "",
-    nextAction: "",
-    nextActionType: "call",
-    nextActionDate: null,
-    nextActionTime: "09:00",
     notes: ""
   });
 
@@ -72,10 +68,6 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
         value: card.value,
         responsibleId: card.responsibleId,
         columnId: card.columnId,
-        nextAction: card.nextAction || "",
-        nextActionType: card.nextActionType || "call",
-        nextActionDate: card.nextActionDate ? new Date(card.nextActionDate) : null,
-        nextActionTime: card.nextActionDate ? format(new Date(card.nextActionDate), "HH:mm") : "09:00",
         notes: card.notes || ""
       });
     }
@@ -129,19 +121,12 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
     if (isSaving) return;
     setIsSaving(true);
 
-    const updatedDate = formData.nextActionDate;
-    if (updatedDate) {
-      const [hours, minutes] = formData.nextActionTime.split(":").map(Number);
-      updatedDate.setHours(hours, minutes);
-    }
-
     try {
       // Persist to DB
       const updatedDbCard = await db.updateCard(card.id, {
         ...card,
         ...formData,
         contactId: formData.clientId, // Force la mise à jour du contactId
-        nextActionDate: updatedDate ? updatedDate.toISOString() : null,
       });
 
       // Map DB response to local state structure
@@ -152,11 +137,8 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
         responsibleId: formData.responsibleId,
         columnId: formData.columnId,
         notes: formData.notes,
-        nextAction: formData.nextAction,
-        nextActionType: formData.nextActionType,
         contactId: updatedDbCard.contactId,
         clientId: updatedDbCard.contactId, // Fallback pour la synchronisation
-        nextActionDate: updatedDate ? updatedDate.toISOString() : null,
         history: [
           { date: new Date().toISOString(), userId: state.currentUser.id, action: "Affaire modifiée" },
           ...(card.history || [])
@@ -365,77 +347,11 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
 
             <Separator />
 
-            {/* Prochaine Action */}
-            <div className="space-y-4">
-              <div className="flex items-center gap-2 text-slate-900 font-bold uppercase text-[10px] tracking-widest">
-                Prochaine Action
-              </div>
-              <div className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Type d'action</Label>
-                  <Select value={formData.nextActionType} onValueChange={val => setFormData({...formData, nextActionType: val})}>
-                    <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="call" className="text-xs">📞 Appel</SelectItem>
-                      <SelectItem value="email" className="text-xs">📧 Email</SelectItem>
-                      <SelectItem value="meeting" className="text-xs">🤝 RDV</SelectItem>
-                      <SelectItem value="relance" className="text-xs">🔔 Relance</SelectItem>
-                      <SelectItem value="other" className="text-xs">📌 Autre</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Description</Label>
-                  <Input 
-                    value={formData.nextAction} 
-                    className="h-9 text-xs border-slate-200 bg-slate-50/50"
-                    onChange={e => setFormData({...formData, nextAction: e.target.value})} 
-                    placeholder="Ex: Envoyer le contrat" 
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Date</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className="w-full h-9 justify-start text-left font-medium text-xs border-slate-200 bg-slate-50/50">
-                          <CalendarIcon className="mr-2 h-3.5 w-3.5 text-slate-400" />
-                          {formData.nextActionDate ? format(formData.nextActionDate, "dd/MM/yyyy") : "Choisir une date"}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={formData.nextActionDate}
-                          onSelect={date => setFormData({...formData, nextActionDate: date})}
-                          initialFocus
-                          locale={fr}
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Heure</Label>
-                    <Input 
-                      type="time" 
-                      className="h-9 text-xs border-slate-200 bg-slate-50/50"
-                      value={formData.nextActionTime} 
-                      onChange={e => setFormData({...formData, nextActionTime: e.target.value})} 
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <Separator />
-
             {/* Tâches liées */}
             <div className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2 text-slate-900 font-bold uppercase text-[10px] tracking-widest">
-                  Tâches liées ({tasks.length})
+                  Actions & Tâches ({tasks.length})
                 </div>
                 <Button 
                   variant="ghost" 
@@ -443,14 +359,16 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
                   className="h-7 text-xs text-green-600 hover:text-green-700 hover:bg-green-50"
                   onClick={() => handleOpenTaskDialog()}
                 >
-                  <Plus className="w-3 h-3 mr-1" /> Ajouter
+                  <Plus className="w-3 h-3 mr-1" /> Ajouter une action
                 </Button>
               </div>
               <div className="space-y-2">
                 {tasks.length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">Aucune tâche planifiée</p>
+                  <p className="text-xs text-slate-400 italic">Aucune action planifiée. Ajoutez-en une pour qu'elle apparaisse dans votre agenda.</p>
                 ) : (
-                  tasks.map(task => (
+                  tasks
+                    .sort((a, b) => new Date(a.date) - new Date(b.date))
+                    .map(task => (
                     <div 
                       key={task.id} 
                       className="flex items-center gap-3 p-2 bg-slate-50 rounded-lg border group cursor-pointer hover:bg-slate-100 transition-colors"
@@ -526,7 +444,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
         task={selectedTask}
         open={isTaskDialogOpen}
         onOpenChange={setIsTaskDialogOpen}
-        defaultContactId={card.clientId}
+        defaultContactId={formData.clientId}
         defaultCardId={card.id}
       />
 

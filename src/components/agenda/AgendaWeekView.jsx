@@ -2,7 +2,7 @@ import React from "react";
 import { format, startOfWeek, addDays, eachDayOfInterval, isToday, isSameDay } from "date-fns";
 import { fr } from "date-fns/locale";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Phone, Mail, Handshake, Bell, Bookmark, Clock, User as UserIcon } from "lucide-react";
+import { Phone, Mail, Handshake, Bell, Bookmark, Clock, User as UserIcon, Briefcase } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8h to 20h
@@ -78,7 +78,10 @@ export default function AgendaWeekView({ tasks, proposals, targetUser, onTaskCli
                       className={`absolute left-1 right-1 rounded-md border-l-4 p-1.5 shadow-sm cursor-pointer z-10 text-white transition-all hover:scale-[1.02] hover:shadow-md ${getTaskColor(task.type)}`}
                       style={pos}
                     >
-                      <p className="text-[9px] font-bold leading-tight truncate">{task.title}</p>
+                      <p className="text-[9px] font-bold leading-tight truncate flex items-center gap-1">
+                        {task.linkedCardId && <Briefcase className="w-2 h-2 shrink-0" />}
+                        {task.title}
+                      </p>
                       <p className="text-[8px] opacity-80">{task.time} • {task.duration}m</p>
                     </div>
                   );

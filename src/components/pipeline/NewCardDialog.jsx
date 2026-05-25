@@ -127,11 +127,6 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
       return;
     }
 
-    if (createTask && !taskData.title) {
-      toast.error("Veuillez donner un titre à la tâche");
-      return;
-    }
-
     try {
       const newCardData = {
         columnId: formData.columnId,
@@ -158,8 +153,9 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
                   priority: savedCard.priority,
                   tags: savedCard.tags || [],
                   order: savedCard.order,
-                  contactId: savedCard.contactId // Use mapped field
-                }] };                return updatedCol;
+                  contactId: savedCard.contactId
+                }] };
+                return updatedCol;
               }
               return col;
             })
@@ -167,23 +163,6 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
         }
         return p;
       });
-
-      if (createTask) {
-        const taskDate = new Date(taskData.date);
-        const [h, m] = taskData.time.split(":").map(Number);
-        taskDate.setHours(h, m);
-
-        const newTaskData = {
-          title: taskData.title,
-          description: `Tâche liée à l'affaire: ${formData.title}`,
-          dueDate: taskDate.toISOString(),
-          status: "pending",
-          assignedTo: formData.responsibleId,
-          contactId: formData.clientId
-        };
-        const savedTask = await db.insertTask(newTaskData);
-        dispatch({ type: "UPDATE_TASKS", payload: [...state.tasks, savedTask] });
-      }
 
       dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
       toast.success("Affaire créée avec succès");
@@ -224,7 +203,6 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
                 + NOUVEAU
               </Button>
             </Label>
-            {/* ... Client Popover stays as updated ... */}
             <Popover open={isClientSearchOpen} onOpenChange={setIsClientSearchOpen}>
               <PopoverTrigger asChild>
                 <Button
@@ -345,96 +323,6 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
               </SelectContent>
             </Select>
           </div>
-
-          <div className="col-span-2 pt-4 border-t">
-            <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-xl">
-              <div className="flex items-center gap-3">
-                <div className="p-2 bg-green-100 text-green-700 rounded-lg">
-                  <CheckSquare className="w-5 h-5" />
-                </div>
-                <div>
-                  <Label className="font-bold text-sm">Créer une tâche liée</Label>
-                  <p className="text-xs text-slate-500">Planifier immédiatement la prochaine action</p>
-                </div>
-              </div>
-              <Switch checked={createTask} onCheckedChange={setCreateTask} />
-            </div>
-          </div>
-
-          {createTask && (
-            <>
-              <div className="col-span-2 space-y-2 animate-in fade-in slide-in-from-top-2">
-                <Label>Titre de la tâche</Label>
-                <Input 
-                  placeholder="Ex: Appel de qualification" 
-                  value={taskData.title} 
-                  onChange={e => setTaskData({...taskData, title: e.target.value})} 
-                />
-              </div>
-
-              <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                <Label>Type</Label>
-                <Select value={taskData.type} onValueChange={val => setTaskData({...taskData, type: val})}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="call">📞 Appel</SelectItem>
-                    <SelectItem value="email">📧 Email</SelectItem>
-                    <SelectItem value="meeting">🤝 RDV</SelectItem>
-                    <SelectItem value="relance">🔔 Relance</SelectItem>
-                    <SelectItem value="other">📌 Autre</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                <Label>Date</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline" className="w-full justify-start text-left font-normal">
-                      <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
-                      {format(taskData.date, "dd/MM/yyyy")}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      selected={taskData.date}
-                      onSelect={date => setTaskData({...taskData, date: date || new Date()})}
-                      initialFocus
-                      locale={fr}
-                    />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                <Label>Heure</Label>
-                <Input 
-                  type="time" 
-                  value={taskData.time} 
-                  onChange={e => setTaskData({...taskData, time: e.target.value})} 
-                />
-              </div>
-
-              <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
-                <Label>Durée (min)</Label>
-                <Select value={taskData.duration} onValueChange={val => setTaskData({...taskData, duration: val})}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="15">15 min</SelectItem>
-                    <SelectItem value="30">30 min</SelectItem>
-                    <SelectItem value="45">45 min</SelectItem>
-                    <SelectItem value="60">1h</SelectItem>
-                    <SelectItem value="120">2h</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </>
-          )}
         </div>
 
         <DialogFooter>
