@@ -313,9 +313,9 @@ export default function ContactsView({ jumpToId, onJumpHandled }) {
       const idsToDelete = [];
       Object.values(siretGroups).forEach(group => {
         if (group.length > 1) {
-          // Keep the most recently created or updated one (highest created_at)
-          const sorted = [...group].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
-          // sorted[0] is the most recent, keep it. Delete the others.
+          // Keep the oldest one (lowest createdAt)
+          const sorted = [...group].sort((a, b) => new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime());
+          // sorted[0] is the oldest, keep it. Delete all others.
           const toDelete = sorted.slice(1).map(c => c.id);
           idsToDelete.push(...toDelete);
         }
@@ -539,7 +539,7 @@ export default function ContactsView({ jumpToId, onJumpHandled }) {
                     <AlertDialogHeader>
                       <AlertDialogTitle>Nettoyer les doublons ?</AlertDialogTitle>
                       <AlertDialogDescription>
-                        Cette action va identifier tous les contacts ayant le **même numéro SIRET** et ne conserver que le plus récent. Les autres seront définitivement supprimés.
+                        Cette action va identifier tous les contacts ayant le **même numéro SIRET** et ne conserver que le **plus ancien**. Les contacts ajoutés plus récemment seront définitivement supprimés.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
