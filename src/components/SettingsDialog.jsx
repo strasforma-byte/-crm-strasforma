@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useApp } from "@/context/AppContext";
+import { db } from "@/lib/db";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";

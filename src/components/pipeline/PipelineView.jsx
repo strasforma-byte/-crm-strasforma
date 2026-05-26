@@ -6,7 +6,7 @@ import { db } from "@/lib/db";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Lock, Globe, Settings2, MoreHorizontal, Search, X, Download, User as UserIcon } from "lucide-react";
+import { Plus, Lock, Globe, Settings2, MoreHorizontal, Search, X, Download, User as UserIcon, Tag as TagIcon } from "lucide-react";
 import KanbanBoard from "./KanbanBoard";
 import NewCardDialog from "./NewCardDialog";
 import EditPipelineDialog from "./EditPipelineDialog";
@@ -21,7 +21,7 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
   const { state, dispatch, isAdmin } = useApp();
   const { canViewPipeline, canEditPipeline } = usePermissions();
 
-  const [activePipelineId, setActivePipelineId] = useState(state.pipelines[0]?.id || "");
+  const [activePipelineId, setActivePipelineId] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [agentFilter, setAgentFilter] = useState("all");
   const [selectedTags, setSelectedTags] = useState([]);
@@ -34,7 +34,7 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
 
   // Jump to record from global search
   useEffect(() => {
-    if (jumpToId && Array.isArray(state.pipelines) && state.pipelines.length > 0) {
+    if (jumpToId && Array.isArray(state?.pipelines) && state.pipelines.length > 0) {
       const allDeals = state.pipelines.flatMap(p => (p.columns || []).flatMap(col => col.cards || []));
       const targetDeal = allDeals.find(d => d.id === jumpToId);
       if (targetDeal) {
@@ -42,20 +42,17 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
         const parentPipeline = state.pipelines.find(p => (p.columns || []).some(col => (col.cards || []).some(c => c.id === targetDeal.id)));
         if (parentPipeline) setActivePipelineId(parentPipeline.id);
         setIsSheetOpen(true);
-        onJumpHandled();
+        if (onJumpHandled) onJumpHandled();
       }
     }
-  }, [jumpToId, state.pipelines]);
-
-  const [newPipeName, setNewPipeName] = useState("");
-  const [newPipePublic, setNewPipePublic] = useState(true);
-  const [isCreating, setIsCreating] = useState(false);
+  }, [jumpToId, state?.pipelines, onJumpHandled]);
 
   const visiblePipelines = useMemo(() => {
-    return state.pipelines.filter(p => canViewPipeline(p));
-  }, [state.pipelines, state.currentUser]);
+    return (state?.pipelines || []).filter(p => canViewPipeline(p));
+  }, [state?.pipelines, state?.currentUser, canViewPipeline]);
 
   const activePipeline = useMemo(() => {
+    if (!Array.isArray(state?.pipelines)) return null;
     const pipe = state.pipelines.find(p => p.id === activePipelineId) || visiblePipelines[0];
     if (!pipe) return null;
 
@@ -77,7 +74,7 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
           // 3. Search Filter
           if (!searchTerm.trim()) return true;
           const term = searchTerm.toLowerCase();
-          const client = state.contacts.find(c => c.id === card.contactId || c.id === card.clientId);
+          const client = (state?.contacts || []).find(c => c.id === card.contactId || c.id === card.clientId);
           return (card.title || "").toLowerCase().includes(term) || 
                  (client?.company || "").toLowerCase().includes(term) ||
                  (client?.firstName || "").toLowerCase().includes(term) ||
@@ -85,7 +82,14 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
         })
       }))
     };
-  }, [activePipelineId, state.pipelines, visiblePipelines, searchTerm, agentFilter, selectedTags, state.contacts]);
+  }, [activePipelineId, state?.pipelines, visiblePipelines, searchTerm, agentFilter, selectedTags, state?.contacts]);
+
+  // Set initial active pipeline if none selected
+  useEffect(() => {
+    if (!activePipelineId && visiblePipelines.length > 0) {
+      setActivePipelineId(visiblePipelines[0].id);
+    }
+  }, [visiblePipelines, activePipelineId]);
 
   const PRESET_TAGS = [
     { label: "Urgent ⚡", value: "urgent", color: "bg-red-500" },
@@ -100,6 +104,10 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
       prev.includes(tagValue) ? prev.filter(t => t !== tagValue) : [...prev, tagValue]
     );
   };
+
+  const [newPipeName, setNewPipeName] = useState("");
+  const [newPipePublic, setNewPipePublic] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
 
   const handleQuickCreate = (columnId) => {
     setDefaultColumnId(columnId);
@@ -269,7 +277,7 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
                   className="h-6 px-2 text-[9px] font-black uppercase text-slate-400 hover:text-red-500"
                   onClick={() => setSelectedTags([])}
                 >
-                  <X className="w-3 h-3 mr-1" /> Effacer
+                  <X className="w-3.5 h-3.5 mr-1" /> Effacer
                 </Button>
               )}
             </div>

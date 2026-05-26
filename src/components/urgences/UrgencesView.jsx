@@ -29,11 +29,12 @@ import { format, isSameDay, isToday, isTomorrow, isYesterday, startOfToday, addD
 import { fr } from "date-fns/locale";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { toast } from "sonner";
+import { db } from "@/lib/db";
 import ProposalSheet from "../agenda/ProposalSheet";
 import TaskDialog from "../agenda/TaskDialog";
 
 export default function UrgencesView() {
-  const { state, dispatch, isAdmin } = useApp();
+  const { state, dispatch, isAdmin, refreshAllData } = useApp();
   const { currentUser } = usePermissions();
   
   const [userFilter, setUserFilter] = useState("all");

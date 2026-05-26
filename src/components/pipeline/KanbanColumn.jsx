@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function KanbanColumn({ column, onCardClick, onQuickCreate }) {
+  const { state, dispatch } = useApp();
   const { setNodeRef } = useDroppable({
     id: column.id,
   });
@@ -36,7 +37,7 @@ export default function KanbanColumn({ column, onCardClick, onQuickCreate }) {
   const [isEditingName, setIsEditingName] = useState(false);
   const [colName, setColName] = useState(column.name);
 
-  const totalValue = column.cards.reduce((sum, card) => sum + (card.value || 0), 0);
+  const totalValue = (column.cards || []).reduce((sum, card) => sum + (card.value || 0), 0);
 
   const handleRename = async () => {
     if (!colName.trim() || colName === column.name) {
@@ -47,9 +48,9 @@ export default function KanbanColumn({ column, onCardClick, onQuickCreate }) {
 
     try {
       await db.updateColumn(column.id, { name: colName });
-      const updatedPipelines = state.pipelines.map(p => ({
+      const updatedPipelines = (state.pipelines || []).map(p => ({
         ...p,
-        columns: p.columns.map(c => c.id === column.id ? { ...c, name: colName } : c)
+        columns: (p.columns || []).map(c => c.id === column.id ? { ...c, name: colName } : c)
       }));
       dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
       setIsEditingName(false);
@@ -61,16 +62,16 @@ export default function KanbanColumn({ column, onCardClick, onQuickCreate }) {
   };
 
   const handleDelete = async () => {
-    if (column.cards.length > 0) {
+    if ((column.cards || []).length > 0) {
       toast.error("Impossible de supprimer une étape contenant des affaires");
       return;
     }
 
     try {
       await db.deleteColumn(column.id);
-      const updatedPipelines = state.pipelines.map(p => ({
+      const updatedPipelines = (state.pipelines || []).map(p => ({
         ...p,
-        columns: p.columns.filter(c => c.id !== column.id)
+        columns: (p.columns || []).filter(c => c.id !== column.id)
       }));
       dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
       toast.success("Étape supprimée");

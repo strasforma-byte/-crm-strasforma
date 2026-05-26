@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
 export default function AgendaListView({ tasks, proposals, onTaskClick, onProposalClick }) {
-  const { state, dispatch } = useApp();
+  const { state, dispatch, refreshAllData } = useApp();
   const today = new Date();
 
   const handleComplete = async (e, task) => {

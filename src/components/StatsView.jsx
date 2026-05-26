@@ -4,6 +4,7 @@ import { useApp } from "@/context/AppContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { 
   Select, 
@@ -31,9 +32,11 @@ import {
   startOfYear, 
   isWithinInterval, 
   endOfToday,
-  formatDistanceToNow
+  formatDistanceToNow,
+  format
 } from "date-fns";
 import { fr } from "date-fns/locale";
+import { toast } from "sonner";
 
 export default function StatsView() {
   const { state } = useApp();

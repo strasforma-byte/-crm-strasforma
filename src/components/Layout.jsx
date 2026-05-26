@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 import { 
-  KanbanSquare, 
+  LayoutDashboard, 
   Users, 
   Calendar, 
   AlertTriangle, 
@@ -65,8 +65,6 @@ export default function Layout() {
 
   const user = state.currentUser;
   
-  if (!user) return null;
-
   const handleLogout = async () => {
     await supabase.auth.signOut();
   };
@@ -117,16 +115,18 @@ export default function Layout() {
   };
 
   const unreadNotifications = (state.notifications || []).filter(n => !n.read).length;
-  const pendingProposals = (state.rdvProposals || []).filter(p => p.status === "pending" && p.commercialId === user.id).length;
+  const pendingProposals = (state.rdvProposals || []).filter(p => p.status === "pending" && p.commercialId === user?.id).length;
   
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   const emergenciesCount = (state.tasks || []).filter(t => {
     if (t.status === "done") return false;
-    if (t.userId !== user.id && !isAdmin) return false;
+    if (t.userId !== user?.id && !isAdmin) return false;
     const taskDate = new Date(t.date);
     return taskDate <= today;
   }).length;
+
+  if (!user) return null;
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
@@ -291,7 +291,7 @@ export default function Layout() {
           <div className="bg-white border-b border-slate-200 px-6 flex items-center justify-between overflow-x-auto scrollbar-hide">
             <TabsList className="h-12 bg-transparent gap-8 p-0">
               <TabsTrigger value="pipeline" className="h-full rounded-none border-b-2 border-transparent data-[state=active]:border-green-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 gap-2 font-bold text-slate-500 data-[state=active]:text-green-700">
-                <KanbanSquare className="w-4 h-4" /> Pipeline
+                <LayoutDashboard className="w-4 h-4" /> Pipeline
               </TabsTrigger>
               <TabsTrigger value="agenda" className="h-full rounded-none border-b-2 border-transparent data-[state=active]:border-green-600 data-[state=active]:bg-transparent data-[state=active]:shadow-none px-1 gap-2 font-bold text-slate-500 data-[state=active]:text-green-700 relative">
                 <Calendar className="w-4 h-4" /> Agenda
