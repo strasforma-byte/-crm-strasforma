@@ -83,7 +83,8 @@ import {
   useSensor, 
   useSensors,
   DragOverlay,
-  defaultDropAnimationSideEffects
+  defaultDropAnimationSideEffects,
+  useDroppable
 } from "@dnd-kit/core";
 import { 
   arrayMove, 
@@ -93,6 +94,7 @@ import {
   useSortable
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { cn } from "@/lib/utils";
 
 const SortIcon = ({ columnKey, sortConfig }) => {
   if (sortConfig.key !== columnKey) return <ArrowUpDown className="ml-1 w-3 h-3 text-slate-300" />;
