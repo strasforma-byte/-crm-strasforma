@@ -274,7 +274,6 @@ export default function KanbanBoard({ pipeline, onQuickCreate }) {
           dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
           toast.success(`Affaire déplacée vers ${overColumn.name}`);
         }
-        toast.success(`Affaire déplacée vers ${overColumn.name}`);
       }
     } catch (error) {
       console.error("Error moving card:", error);
