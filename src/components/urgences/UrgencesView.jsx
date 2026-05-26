@@ -14,6 +14,7 @@ import {
   Clock, 
   Calendar as CalendarIcon, 
   CheckCircle2, 
+  Check,
   X,
   Phone,
   Mail,
@@ -23,7 +24,8 @@ import {
   Briefcase,
   Redo2,
   Plus,
-  AlertTriangle
+  AlertTriangle,
+  MessageSquare
 } from "lucide-react";
 import { format, isSameDay, isToday, isTomorrow, isYesterday, startOfToday, addDays } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -32,6 +34,7 @@ import { toast } from "sonner";
 import { db } from "@/lib/db";
 import ProposalSheet from "../agenda/ProposalSheet";
 import TaskDialog from "../agenda/TaskDialog";
+import ContactSheet from "../contacts/ContactSheet";
 
 export default function UrgencesView() {
   const { state, dispatch, isAdmin, refreshAllData } = useApp();
@@ -50,6 +53,28 @@ export default function UrgencesView() {
   const [isProposalSheetOpen, setIsProposalSheetOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
+  const [selectedContact, setSelectedContact] = useState(null);
+  const [isContactSheetOpen, setIsContactSheetOpen] = useState(false);
+
+  const handleLogInteractionForDeal = (e, deal) => {
+    if (e) e.stopPropagation();
+    const contact = state.contacts.find(c => c.id === deal.contactId || c.id === deal.clientId);
+    if (contact) {
+      setSelectedContact(contact);
+      setIsContactSheetOpen(true);
+    } else {
+      toast.error("Contact non trouvé");
+    }
+  };
+
+  const handlePlanTaskForDeal = (e, deal) => {
+    if (e) e.stopPropagation();
+    setSelectedTask({ 
+      linkedCardId: deal.id, 
+      linkedContactId: deal.contactId || deal.clientId 
+    });
+    setIsTaskDialogOpen(true);
+  };
 
   const handleTaskClick = (task) => {
     setSelectedTask(task);
@@ -100,6 +125,50 @@ export default function UrgencesView() {
     }
     return props;
   }, [state.rdvProposals, userFilter, isAdmin, currentUser]);
+
+  const ProposalItem = ({ proposal }) => {
+    const prospector = state.users.find(u => u.id === proposal.prospectorId);
+    const contact = state.contacts.find(c => c.id === proposal.linkedContactId);
+    const card = (Array.isArray(state.pipelines) ? state.pipelines : []).flatMap(p => (p.columns || []).flatMap(col => (col.cards || []))).find(c => c.id === proposal.linkedCardId);
+
+    return (
+      <Card 
+        className="p-4 flex items-center gap-4 hover:shadow-md transition-shadow group cursor-pointer border-l-4 border-l-amber-500 bg-amber-50/20"
+        onClick={() => { setSelectedProposal(proposal); setIsProposalSheetOpen(true); }}
+      >
+        <div className="shrink-0 p-2 bg-white rounded-lg border border-amber-200">
+          <Handshake className="w-5 h-5 text-amber-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="font-bold text-sm text-slate-900 truncate">{proposal.title}</p>
+            <Badge className="bg-amber-400 text-amber-900 text-[10px] uppercase font-bold border-none">À valider</Badge>
+          </div>
+          <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-600">
+            <span className="font-medium text-amber-700">Proposé par {prospector?.name}</span>
+            {contact && (
+              <span className="flex items-center gap-1">
+                <UserIcon className="w-3 h-3" /> {contact.firstName} {contact.lastName}
+              </span>
+            )}
+            {card && (
+              <span className="flex items-center gap-1 text-green-600 font-medium">
+                <Briefcase className="w-3 h-3" /> {card.title}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+          <Button variant="outline" size="sm" className="h-8 text-xs text-red-600 border-red-100 hover:bg-red-50 font-bold" onClick={(e) => handleRefuseProposal(e, proposal)}>
+            Refuser
+          </Button>
+          <Button variant="outline" size="sm" className="h-8 text-xs text-green-600 border-green-100 hover:bg-green-50 font-bold" onClick={(e) => handleAcceptProposal(e, proposal)}>
+            Accepter
+          </Button>
+        </div>
+      </Card>
+    );
+  };
 
   const neglectedDeals = useMemo(() => {
     const pipelines = Array.isArray(state.pipelines) ? state.pipelines : [];
@@ -249,6 +318,107 @@ export default function UrgencesView() {
     } catch (error) {
       console.error("Error completing task:", error);
       toast.error("Erreur lors de la mise à jour de la tâche");
+    }
+  };
+
+  const handleAcceptProposal = async (e, proposal) => {
+    e.stopPropagation();
+    try {
+      // 1. Update proposal status
+      await db.updateProposal(proposal.id, { ...proposal, status: "accepted" });
+      const updatedProposals = state.rdvProposals.map(p => p.id === proposal.id ? { ...p, status: "accepted" } : p);
+
+      // 2. Create task
+      const taskData = {
+        title: `RDV : ${proposal.title}`,
+        userId: proposal.commercialId,
+        assignedTo: proposal.commercialId,
+        type: "meeting",
+        dueDate: new Date(proposal.proposedDate).toISOString(),
+        linkedContactId: proposal.linkedContactId,
+        linkedCardId: proposal.linkedCardId,
+        status: "pending",
+        description: proposal.notes || ""
+      };
+      const savedTask = await db.insertTask(taskData);
+      
+      // 3. Audit for linked deal
+      if (proposal.linkedCardId) {
+        const pipeline = (Array.isArray(state.pipelines) ? state.pipelines : []).find(p => p.columns.some(col => col.cards.some(c => c.id === proposal.linkedCardId)));
+        if (pipeline) {
+          const card = pipeline.columns.flatMap(col => col.cards).find(c => c.id === proposal.linkedCardId);
+          if (card) {
+            const historyEntry = {
+              date: new Date().toISOString(),
+              userId: currentUser.id,
+              action: `Proposition de RDV acceptée depuis les urgences : ${proposal.title}`
+            };
+            const updatedCard = { ...card, history: [historyEntry, ...(card.history || [])] };
+            await db.updateCard(card.id, updatedCard);
+          }
+        }
+      }
+
+      // 4. Notification
+      const newNotifData = {
+        userId: proposal.prospectorId,
+        type: "rdv_proposal_accepted",
+        message: `${currentUser.name} a accepté votre proposition : ${proposal.title}`,
+        relatedId: proposal.id,
+        read: false
+      };
+      const savedNotif = await db.insertNotification(newNotifData);
+
+      dispatch({ type: "UPDATE_PROPOSALS", payload: updatedProposals });
+      dispatch({ type: "UPDATE_TASKS", payload: [...state.tasks, savedTask] });
+      dispatch({ type: "UPDATE_NOTIFICATIONS", payload: [...state.notifications, savedNotif] });
+      
+      await refreshAllData();
+      toast.success("Proposition acceptée");
+    } catch (error) {
+      toast.error("Erreur lors de l'acceptation");
+    }
+  };
+
+  const handleRefuseProposal = async (e, proposal) => {
+    e.stopPropagation();
+    const reason = prompt("Motif du refus :");
+    if (!reason) return;
+
+    try {
+      await db.updateProposal(proposal.id, { ...proposal, status: "refused", refusalReason: reason });
+      const updatedProposals = state.rdvProposals.map(p => p.id === proposal.id ? { ...p, status: "refused", refusalReason: reason } : p);
+
+      if (proposal.linkedCardId) {
+        const pipeline = (Array.isArray(state.pipelines) ? state.pipelines : []).find(p => p.columns.some(col => col.cards.some(c => c.id === proposal.linkedCardId)));
+        if (pipeline) {
+          const card = pipeline.columns.flatMap(col => col.cards).find(c => c.id === proposal.linkedCardId);
+          if (card) {
+            const historyEntry = {
+              date: new Date().toISOString(),
+              userId: currentUser.id,
+              action: `Proposition de RDV refusée depuis les urgences : ${proposal.title} (Motif : ${reason})`
+            };
+            const updatedCard = { ...card, history: [historyEntry, ...(card.history || [])] };
+            await db.updateCard(card.id, updatedCard);
+          }
+        }
+      }
+
+      const newNotifData = {
+        userId: proposal.prospectorId,
+        type: "rdv_proposal_refused",
+        message: `${currentUser.name} a refusé votre proposition : ${proposal.title} (Motif : ${reason})`,
+        relatedId: proposal.id,
+        read: false
+      };
+      await db.insertNotification(newNotifData);
+
+      dispatch({ type: "UPDATE_PROPOSALS", payload: updatedProposals });
+      await refreshAllData();
+      toast.success("Proposition refusée");
+    } catch (error) {
+      toast.error("Erreur lors du refus");
     }
   };
 
@@ -454,21 +624,7 @@ export default function UrgencesView() {
               </div>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-2 pt-2 pl-4">
-              {pendingProposals.map(prop => (
-                <Card key={prop.id} className="p-4 flex items-center gap-4 bg-amber-50/30 border-amber-100 hover:shadow-md transition-shadow cursor-pointer" onClick={() => handleProposalClick(prop)}>
-                  <div className="text-xl">📋</div>
-                  <div className="flex-1">
-                    <p className="font-bold text-sm">{prop.title}</p>
-                    <p className="text-xs text-slate-500">Proposé par {state.users.find(u => u.id === prop.prospectorId)?.name}</p>
-                  </div>
-                  <Button size="sm" variant="outline" className="text-amber-700 border-amber-200 hover:bg-amber-100" onClick={(e) => {
-                    e.stopPropagation();
-                    handleProposalClick(prop);
-                  }}>
-                    Traiter
-                  </Button>
-                </Card>
-              ))}
+              {pendingProposals.map(prop => <ProposalItem key={prop.id} proposal={prop} />)}
             </CollapsibleContent>
           </Collapsible>
         )}
@@ -490,29 +646,49 @@ export default function UrgencesView() {
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-2 pt-2 pl-4">
               <p className="text-[11px] text-amber-600 mb-2 font-medium italic">⚠️ Ces affaires n'ont aucune action future planifiée.</p>
-              {neglectedDeals.map(deal => (
-                <Card 
-                  key={deal.id} 
-                  className="p-4 flex items-center gap-4 hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => {
-                    setSelectedTask({ linkedCardId: deal.id, linkedContactId: deal.contactId || deal.clientId });
-                    setIsTaskDialogOpen(true);
-                  }}
-                >
-                  <div className="shrink-0 p-2 bg-amber-100 rounded-lg">
-                    <Briefcase className="w-4 h-4 text-amber-600" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-sm truncate">{deal.title}</p>
-                    <p className="text-[11px] text-slate-500">
-                      {state.contacts.find(c => c.id === deal.contactId || c.id === deal.clientId)?.company || "Client inconnu"}
-                    </p>
-                  </div>
-                  <Button size="sm" variant="ghost" className="text-amber-600 hover:bg-amber-50 font-bold">
-                    <Plus className="w-3.5 h-3.5 mr-1" /> Planifier
-                  </Button>
-                </Card>
-              ))}
+              {neglectedDeals.map(deal => {
+                const client = state.contacts.find(c => c.id === deal.contactId || c.id === deal.clientId);
+                return (
+                  <Card 
+                    key={deal.id} 
+                    className="p-4 flex flex-col sm:flex-row sm:items-center gap-4 hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-amber-400 group"
+                    onClick={() => handlePlanTaskForDeal(null, deal)}
+                  >
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="shrink-0 p-2 bg-amber-50 rounded-lg group-hover:bg-amber-100 transition-colors">
+                        <Briefcase className="w-5 h-5 text-amber-600" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="font-bold text-sm text-slate-900 truncate">{deal.title}</p>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <Building2 className="w-3 h-3 text-slate-400 shrink-0" />
+                          <p className="text-[11px] text-slate-500 font-medium truncate">
+                            {client?.company || "Client inconnu"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity self-end sm:self-auto">
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="h-8 text-[11px] text-blue-600 border-blue-100 hover:bg-blue-50 font-bold"
+                        onClick={(e) => handleLogInteractionForDeal(e, deal)}
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 mr-1.5" /> Consigner
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        className="h-8 text-[11px] bg-amber-500 hover:bg-amber-600 text-white font-bold shadow-sm"
+                        onClick={(e) => handlePlanTaskForDeal(e, deal)}
+                      >
+                        <Plus className="w-3.5 h-3.5 mr-1.5" /> Planifier
+                      </Button>
+                    </div>
+                  </Card>
+                );
+              })}
             </CollapsibleContent>
           </Collapsible>
         )}
@@ -528,6 +704,14 @@ export default function UrgencesView() {
         task={selectedTask}
         open={isTaskDialogOpen}
         onOpenChange={setIsTaskDialogOpen}
+        defaultContactId={selectedTask?.linkedContactId}
+        defaultCardId={selectedTask?.linkedCardId}
+      />
+
+      <ContactSheet 
+        contact={selectedContact}
+        open={isContactSheetOpen}
+        onOpenChange={setIsContactSheetOpen}
       />
     </div>
   );

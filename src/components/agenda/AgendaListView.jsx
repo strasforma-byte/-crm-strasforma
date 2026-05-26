@@ -11,7 +11,7 @@ import { db } from "@/lib/db";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
-export default function AgendaListView({ tasks, proposals, onTaskClick, onProposalClick }) {
+export default function AgendaListView({ baseDate, tasks, proposals, onTaskClick, onProposalClick }) {
   const { state, dispatch, refreshAllData } = useApp();
   const today = new Date();
 
@@ -143,10 +143,10 @@ export default function AgendaListView({ tasks, proposals, onTaskClick, onPropos
     }
   };
 
-  // List from yesterday to 7 days in the future
+  // List from -1 day to 14 days from reference date
   const days = eachDayOfInterval({
-    start: addDays(today, -1),
-    end: addDays(today, 14),
+    start: addDays(baseDate || today, -1),
+    end: addDays(baseDate || today, 14),
   });
 
   const getDayLabel = (day) => {

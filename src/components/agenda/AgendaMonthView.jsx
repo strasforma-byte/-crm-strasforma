@@ -8,10 +8,11 @@ import { useApp } from "@/context/AppContext";
 import { db } from "@/lib/db";
 import { toast } from "sonner";
 
-export default function AgendaMonthView({ tasks, proposals, onTaskClick, onProposalClick }) {
+export default function AgendaMonthView({ baseDate, tasks, proposals, onTaskClick, onProposalClick }) {
   const { state, dispatch, refreshAllData } = useApp();
   const today = new Date();
-  const monthStart = startOfMonth(today);
+  const referenceDate = baseDate || today;
+  const monthStart = startOfMonth(referenceDate);
   const monthEnd = endOfMonth(monthStart);
   const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
   const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });

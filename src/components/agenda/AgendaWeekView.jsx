@@ -7,10 +7,10 @@ import { useApp } from "@/context/AppContext";
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8h to 20h
 
-export default function AgendaWeekView({ tasks, proposals, targetUser, onTaskClick, onProposalClick }) {
+export default function AgendaWeekView({ baseDate, tasks, proposals, targetUser, onTaskClick, onProposalClick }) {
   const { state } = useApp();
   const today = new Date();
-  const weekStart = startOfWeek(today, { weekStartsOn: 1 });
+  const weekStart = startOfWeek(baseDate || today, { weekStartsOn: 1 });
   const weekDays = eachDayOfInterval({
     start: weekStart,
     end: addDays(weekStart, 6),
