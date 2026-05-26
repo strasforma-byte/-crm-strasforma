@@ -299,6 +299,45 @@ export default function ContactsView({ jumpToId, onJumpHandled }) {
     }
   };
 
+  const handleCleanDuplicates = async () => {
+    setIsCleaning(true);
+    try {
+      const siretGroups = {};
+      state.contacts.forEach(c => {
+        if (c.siret) {
+          if (!siretGroups[c.siret]) siretGroups[c.siret] = [];
+          siretGroups[c.siret].push(c);
+        }
+      });
+
+      const idsToDelete = [];
+      Object.values(siretGroups).forEach(group => {
+        if (group.length > 1) {
+          // Keep the most recently created or updated one (highest created_at)
+          const sorted = [...group].sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+          // sorted[0] is the most recent, keep it. Delete the others.
+          const toDelete = sorted.slice(1).map(c => c.id);
+          idsToDelete.push(...toDelete);
+        }
+      });
+
+      if (idsToDelete.length === 0) {
+        toast.info("Aucun doublon trouvé sur le numéro SIRET");
+        setIsCleaning(false);
+        return;
+      }
+
+      await db.bulkDeleteContacts(idsToDelete);
+      dispatch({ type: "UPDATE_CONTACTS", payload: state.contacts.filter(c => !idsToDelete.includes(c.id)) });
+      toast.success(`${idsToDelete.length} doublons supprimés avec succès`);
+    } catch (error) {
+      console.error("Cleaning error:", error);
+      toast.error("Erreur lors du nettoyage des doublons");
+    } finally {
+      setIsCleaning(false);
+    }
+  };
+
   const handleCreateDealForContact = (e, contact) => {
     e.stopPropagation();
     setSelectedContact(contact);
@@ -488,6 +527,29 @@ export default function ContactsView({ jumpToId, onJumpHandled }) {
                   onChange={e => setSearchTerm(e.target.value)}
                 />
               </div>
+              {isAdmin && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-9 border-amber-200 text-amber-700 hover:bg-amber-50 font-bold">
+                      {isCleaning ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
+                      Nettoyer
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Nettoyer les doublons ?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Cette action va identifier tous les contacts ayant le **même numéro SIRET** et ne conserver que le plus récent. Les autres seront définitivement supprimés.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Annuler</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleCleanDuplicates} className="bg-amber-600 hover:bg-amber-700">Lancer le nettoyage</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
+
               <Button onClick={handleExportExcel} variant="outline" size="sm" className="h-9 border-slate-200">
                 <Download className="w-4 h-4 mr-2" /> Exporter
               </Button>
