@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import * as XLSX from "xlsx";
 import { useApp } from "@/context/AppContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -10,6 +10,7 @@ import { Plus, Lock, Globe, Settings2, MoreHorizontal, Search, X, Download, User
 import KanbanBoard from "./KanbanBoard";
 import NewCardDialog from "./NewCardDialog";
 import EditPipelineDialog from "./EditPipelineDialog";
+import CardDetailSheet from "./CardDetailSheet";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -33,12 +34,12 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
 
   // Jump to record from global search
   useEffect(() => {
-    if (jumpToId && state.pipelines.length > 0) {
-      const allDeals = state.pipelines.flatMap(p => p.columns.flatMap(col => col.cards));
+    if (jumpToId && Array.isArray(state.pipelines) && state.pipelines.length > 0) {
+      const allDeals = state.pipelines.flatMap(p => (p.columns || []).flatMap(col => col.cards || []));
       const targetDeal = allDeals.find(d => d.id === jumpToId);
       if (targetDeal) {
         setSelectedCard(targetDeal);
-        const parentPipeline = state.pipelines.find(p => p.columns.some(col => col.cards.some(c => c.id === targetDeal.id)));
+        const parentPipeline = state.pipelines.find(p => (p.columns || []).some(col => (col.cards || []).some(c => c.id === targetDeal.id)));
         if (parentPipeline) setActivePipelineId(parentPipeline.id);
         setIsSheetOpen(true);
         onJumpHandled();
@@ -61,7 +62,7 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
     // Apply filters
     return {
       ...pipe,
-      columns: pipe.columns.map(col => ({
+      columns: (pipe.columns || []).map(col => ({
         ...col,
         cards: (col.cards || []).filter(card => {
           // 1. Agent Filter
@@ -277,9 +278,9 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
 
         <div className="flex items-center gap-2 w-full lg:w-auto justify-between lg:justify-end">
           <div className="flex -space-x-2 mr-4 overflow-hidden">
-            {state.users.slice(0, 4).map(u => (
+            {(state.users || []).slice(0, 4).map(u => (
               <Badge key={u.id} className="w-8 h-8 rounded-full border-2 border-white p-0 flex items-center justify-center text-[10px]" style={{ backgroundColor: u.color }}>
-                {u.name.charAt(0)}
+                {u.name?.charAt(0) || "?"}
               </Badge>
             ))}
           </div>
@@ -318,7 +319,7 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
 
       <CardDetailSheet 
         card={selectedCard} 
-        pipeline={state.pipelines.find(p => p.columns?.some(col => col.cards?.some(c => c.id === selectedCard?.id)))}
+        pipeline={Array.isArray(state.pipelines) ? state.pipelines.find(p => (p.columns || []).some(col => (col.cards || []).some(c => c.id === selectedCard?.id))) : null}
         open={isSheetOpen} 
         onOpenChange={setIsSheetOpen} 
       />
@@ -359,6 +360,16 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
         open={isEditPipelineOpen}
         onOpenChange={setIsEditPipelineOpen}
         pipeline={activePipeline}
+      />
+
+      <NewCardDialog 
+        open={isNewCardOpen} 
+        onOpenChange={(val) => {
+          setIsNewCardOpen(val);
+          if (!val) setDefaultColumnId("");
+        }}
+        defaultPipelineId={activePipeline?.id}
+        defaultColumnId={defaultColumnId}
       />
     </div>
   );

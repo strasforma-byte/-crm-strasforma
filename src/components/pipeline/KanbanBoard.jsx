@@ -22,6 +22,7 @@ import KanbanCard from "./KanbanCard";
 import CardDetailSheet from "./CardDetailSheet";
 import TaskDialog from "../agenda/TaskDialog";
 import { toast } from "sonner";
+import { Target, Calendar } from "lucide-react";
 
 import { db } from "@/lib/db";
 
@@ -30,7 +31,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 
-export default function KanbanBoard({ pipeline, onQuickCreate }) {
+export default function KanbanBoard({ pipeline, onQuickCreate, onCardClick }) {
   const { state, dispatch, refreshAllData } = useApp();
   const { isAdmin, currentUser } = usePermissions();
   const [activeCard, setActiveCard] = useState(null);
@@ -45,10 +46,13 @@ export default function KanbanBoard({ pipeline, onQuickCreate }) {
   const [isSavingReason, setIsSavingReason] = useState(false);
 
   const handleCardClick = (card, quickAddTask = false) => {
-    setSelectedCard(card);
     if (quickAddTask) {
+      setSelectedCard(card);
       setIsTaskDialogOpen(true);
+    } else if (onCardClick) {
+      onCardClick(card);
     } else {
+      setSelectedCard(card);
       setIsSheetOpen(true);
     }
   };
