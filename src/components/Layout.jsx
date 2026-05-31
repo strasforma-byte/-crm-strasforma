@@ -37,6 +37,7 @@ import ContactsView from "./contacts/ContactsView";
 import AgendaView from "./agenda/AgendaView";
 import UrgencesView from "./urgences/UrgencesView";
 import StatsView from "./StatsView";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 import { formatDistanceToNow } from "date-fns";
 import { fr } from "date-fns/locale";
 import { db } from "@/lib/db";
@@ -56,7 +57,7 @@ import {
 
 export default function Layout() {
   const { state, dispatch, isAdmin } = useApp();
-  const [activeTab, setActiveTab] = useState("pipeline");
+  const [activeTab, setActiveTab] = useLocalStorage("paff_active_tab", "pipeline");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isUsersOpen, setIsUsersOpen] = useState(false);
   const [globalSearch, setGlobalSearch] = useState("");

@@ -16,12 +16,13 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
+import { useLocalStorage } from "@/hooks/useLocalStorage";
 
 export default function PipelineView({ jumpToId, onJumpHandled }) {
   const { state, dispatch, isAdmin } = useApp();
   const { canViewPipeline, canEditPipeline } = usePermissions();
 
-  const [activePipelineId, setActivePipelineId] = useState("");
+  const [activePipelineId, setActivePipelineId] = useLocalStorage("paff_active_pipeline_id", "");
   const [searchTerm, setSearchTerm] = useState("");
   const [agentFilter, setAgentFilter] = useState("all");
   const [selectedTags, setSelectedTags] = useState([]);

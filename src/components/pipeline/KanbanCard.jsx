@@ -149,9 +149,15 @@ export default function KanbanCard({ card, onClick, isOverlay }) {
     >
       <div className={`h-1 w-full absolute top-0 left-0 ${getStatusColor()}`} />
       
+      {card.fundingSource && (
+        <Badge variant="outline" className="absolute top-2 right-2 px-1.5 py-0 h-4 text-[8px] uppercase font-black tracking-tighter bg-indigo-50 text-indigo-700 border-indigo-200 shadow-sm z-10">
+          {card.fundingSource}
+        </Badge>
+      )}
+      
       <CardContent className="p-3 pt-4 flex flex-col gap-3">
         <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 pr-12">
             <div className="text-slate-300 group-hover:text-slate-500 p-0.5 transition-colors">
               <GripVertical className="w-4 h-4" />
             </div>
@@ -167,13 +173,8 @@ export default function KanbanCard({ card, onClick, isOverlay }) {
             <span className="truncate">{client?.company || "Entreprise inconnue"}</span>
           </div>
           
-          {(card.fundingSource || activeTags.length > 0) && (
+          {activeTags.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-0.5">
-              {card.fundingSource && (
-                <Badge variant="outline" className="px-1.5 py-0 h-4 text-[8px] uppercase font-black tracking-tighter bg-indigo-50 text-indigo-700 border-indigo-200">
-                  {card.fundingSource}
-                </Badge>
-              )}
               {activeTags.slice(0, 2).map(tag => (
                 <Badge key={tag.value} variant="outline" className={`px-1.5 py-0 h-4 text-[8px] uppercase font-black tracking-tighter ${tag.color}`}>
                   {tag.label}
