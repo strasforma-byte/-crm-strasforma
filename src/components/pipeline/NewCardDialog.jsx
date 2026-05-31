@@ -37,6 +37,7 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
     title: "",
     clientId: "",
     value: "",
+    fundingSource: "FOND PROPRE",
     pipelineId: defaultPipelineId || "",
     columnId: defaultColumnId || "",
     responsibleId: state.currentUser?.id || ""
@@ -64,6 +65,7 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
         title: "",
         clientId: defaultContactId || "",
         value: "",
+        fundingSource: "FOND PROPRE",
         pipelineId: pipeId,
         columnId: defaultColumnId || (pipeline && pipeline.columns && pipeline.columns[0]?.id) || "",
         responsibleId: initialResponsibleId
@@ -138,6 +140,7 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
         contactId: formData.clientId,
         title: formData.title,
         value: parseFloat(formData.value) || 0,
+        fundingSource: formData.fundingSource,
         responsibleId: formData.responsibleId,
         priority: "medium",
         tags: [],
@@ -159,6 +162,7 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
                   id: savedCard.id,
                   title: savedCard.title,
                   value: savedCard.value,
+                  fundingSource: savedCard.fundingSource,
                   priority: savedCard.priority,
                   tags: savedCard.tags || [],
                   order: savedCard.order,
@@ -311,6 +315,20 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
               <SelectContent>
                 {state.pipelines.find(p => p.id === formData.pipelineId)?.columns.map(col => (
                   <SelectItem key={col.id} value={col.id} className="text-xs">{col.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Source de financement</Label>
+            <Select value={formData.fundingSource} onValueChange={val => setFormData({...formData, fundingSource: val})}>
+              <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {["OPCO", "CPF", "AGEFICE", "FAFCEA", "FIFPL", "FOND PROPRE"].map(source => (
+                  <SelectItem key={source} value={source} className="text-xs">{source}</SelectItem>
                 ))}
               </SelectContent>
             </Select>

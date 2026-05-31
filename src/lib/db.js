@@ -69,6 +69,7 @@ const mapCard = (card) => {
     responsibleId: card.responsible_id,
     notes: cleanNotes,
     columnId: card.column_id,
+    fundingSource: card.funding_source,
     history: history,
     createdAt: card.created_at
   };
@@ -87,6 +88,7 @@ const toDbCard = (card) => {
     title: card.title,
     value: card.value,
     priority: card.priority,
+    funding_source: card.fundingSource,
     tags: card.tags,
     notes: notesWithMeta,
     "order": card.order || 0

@@ -62,6 +62,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
     title: "",
     clientId: "",
     value: 0,
+    fundingSource: "",
     responsibleId: "",
     columnId: "",
     notes: "",
@@ -82,6 +83,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
         title: card.title,
         clientId: card.contactId || card.clientId || "",
         value: card.value,
+        fundingSource: card.fundingSource || "FOND PROPRE",
         responsibleId: card.responsibleId,
         columnId: card.columnId,
         notes: card.notes || "",
@@ -379,6 +381,20 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
                       />
                     </div>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Source de financement</Label>
+                    <Select value={formData.fundingSource} onValueChange={val => setFormData({...formData, fundingSource: val})}>
+                      <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["OPCO", "CPF", "AGEFICE", "FAFCEA", "FIFPL", "FOND PROPRE"].map(source => (
+                          <SelectItem key={source} value={source} className="text-xs">{source}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
                   <div className="space-y-1.5">
                     <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Responsable</Label>
                     <Select value={formData.responsibleId} onValueChange={val => setFormData({...formData, responsibleId: val})}>

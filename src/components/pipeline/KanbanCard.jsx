@@ -167,8 +167,13 @@ export default function KanbanCard({ card, onClick, isOverlay }) {
             <span className="truncate">{client?.company || "Entreprise inconnue"}</span>
           </div>
           
-          {activeTags.length > 0 && (
+          {(card.fundingSource || activeTags.length > 0) && (
             <div className="flex flex-wrap gap-1 mt-0.5">
+              {card.fundingSource && (
+                <Badge variant="outline" className="px-1.5 py-0 h-4 text-[8px] uppercase font-black tracking-tighter bg-indigo-50 text-indigo-700 border-indigo-200">
+                  {card.fundingSource}
+                </Badge>
+              )}
               {activeTags.slice(0, 2).map(tag => (
                 <Badge key={tag.value} variant="outline" className={`px-1.5 py-0 h-4 text-[8px] uppercase font-black tracking-tighter ${tag.color}`}>
                   {tag.label}
