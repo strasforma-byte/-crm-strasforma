@@ -123,6 +123,8 @@ export default function ContactsView({ jumpToId, onJumpHandled }) {
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isNewCardOpen, setIsNewCardOpen] = useState(false);
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
+  const [isNewListOpen, setIsNewListOpen] = useState(false);
+  const [newListName, setNewListName] = useState("");
   const [selectedContact, setSelectedContact] = useState(null);
   const [isCleaning, setIsCleaning] = useState(false);
 
@@ -138,6 +140,34 @@ export default function ContactsView({ jumpToId, onJumpHandled }) {
       }
     }
   }, [jumpToId, state?.contacts, onJumpHandled]);
+
+  const handleCreateList = async () => {
+    if (!newListName.trim()) return;
+    try {
+      const newList = await db.insertContactList({ name: newListName, color: "#3b82f6" });
+      dispatch({ type: "UPDATE_CONTACT_LISTS", payload: [...state.contactLists, newList] });
+      setNewListName("");
+      setIsNewListOpen(false);
+      toast.success("Répertoire créé");
+    } catch (error) {
+      toast.error("Erreur lors de la création du répertoire");
+    }
+  };
+
+  const handleDeleteList = async (listId) => {
+    if (!isAdmin) {
+      toast.error("Seuls les administrateurs peuvent supprimer des répertoires");
+      return;
+    }
+    try {
+      await db.deleteContactList(listId);
+      dispatch({ type: "UPDATE_CONTACT_LISTS", payload: state.contactLists.filter(l => l.id !== listId) });
+      if (activeListId === listId) setActiveListId("list-default");
+      toast.success("Répertoire supprimé");
+    } catch (error) {
+      toast.error("Erreur lors de la suppression du répertoire");
+    }
+  };
 
   const [editingCommentId, setEditingCommentId] = useState(null);
   const [tempComment, setTempComment] = useState("");
@@ -478,9 +508,12 @@ export default function ContactsView({ jumpToId, onJumpHandled }) {
     <div className="h-full flex">
       {/* Sidebar for Lists */}
       <div className="w-64 bg-white border-r border-slate-200 flex flex-col shrink-0">
-        <div className="p-4 border-b">
+        <div className="p-4 border-b space-y-2">
           <Button variant="outline" className="w-full justify-start text-xs font-bold" onClick={() => setIsImportOpen(true)}>
             <Upload className="w-4 h-4 mr-2" /> Importer Contacts
+          </Button>
+          <Button variant="ghost" className="w-full justify-start text-xs font-bold text-blue-600 hover:bg-blue-50" onClick={() => setIsNewListOpen(true)}>
+            <PlusCircle className="w-4 h-4 mr-2" /> Nouveau Répertoire
           </Button>
         </div>
         
@@ -502,7 +535,14 @@ export default function ContactsView({ jumpToId, onJumpHandled }) {
 
           <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
             {contactLists.map(list => (
-              <DroppableList key={list.id} list={list} activeListId={activeListId} onClick={setActiveListId} contactsCount={contacts.filter(c => c.listId === list.id).length} />
+              <DroppableList 
+                key={list.id} 
+                list={list} 
+                activeListId={activeListId} 
+                onClick={setActiveListId} 
+                contactsCount={contacts.filter(c => c.listId === list.id).length} 
+                onDelete={isAdmin ? handleDeleteList : null}
+              />
             ))}
           </DndContext>
         </div>
@@ -799,6 +839,29 @@ export default function ContactsView({ jumpToId, onJumpHandled }) {
           defaultContactId={selectedContact?.id}
         />
 
+        <Dialog open={isNewListOpen} onOpenChange={setIsNewListOpen}>
+          <DialogContent className="sm:max-w-[400px]">
+            <DialogHeader>
+              <DialogTitle>Nouveau Répertoire</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+              <Label className="text-xs font-bold text-slate-500 uppercase">Nom du répertoire</Label>
+              <Input 
+                value={newListName} 
+                onChange={e => setNewListName(e.target.value)} 
+                placeholder="Ex: Prospect 2024"
+                className="mt-2 h-9 text-sm"
+                autoFocus
+                onKeyDown={e => e.key === 'Enter' && handleCreateList()}
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsNewListOpen(false)}>Annuler</Button>
+              <Button onClick={handleCreateList} className="bg-blue-600 hover:bg-blue-700">Créer</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         <DragOverlay dropAnimation={dropAnimation}>
           {/* Draggable overlay content placeholder */}
         </DragOverlay>
@@ -807,7 +870,7 @@ export default function ContactsView({ jumpToId, onJumpHandled }) {
   );
 }
 
-function DroppableList({ list, activeListId, onClick, contactsCount }) {
+function DroppableList({ list, activeListId, onClick, contactsCount, onDelete }) {
   const { isOver, setNodeRef } = useDroppable({
     id: list.id,
   });
@@ -819,16 +882,42 @@ function DroppableList({ list, activeListId, onClick, contactsCount }) {
       ref={setNodeRef}
       onClick={() => onClick(list.id)}
       className={cn(
-        "w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold cursor-pointer transition-all",
+        "group w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-bold cursor-pointer transition-all",
         isActive ? "bg-blue-50 text-blue-700 shadow-sm" : "text-slate-600 hover:bg-slate-50",
         isOver && "ring-2 ring-blue-400 bg-blue-50/50"
       )}
     >
-      <div className="flex items-center gap-2">
-        <Folder className={cn("w-4 h-4", isActive ? "text-blue-500" : "text-slate-400")} />
-        {list.name}
+      <div className="flex items-center gap-2 overflow-hidden">
+        <Folder className={cn("w-4 h-4 shrink-0", isActive ? "text-blue-500" : "text-slate-400")} />
+        <span className="truncate">{list.name}</span>
       </div>
-      <Badge variant="ghost" className="text-[10px] p-0">{contactsCount}</Badge>
+      <div className="flex items-center gap-1">
+        <Badge variant="ghost" className="text-[10px] p-0 group-hover:hidden">{contactsCount}</Badge>
+        {onDelete && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button 
+                className="hidden group-hover:flex p-1 text-slate-300 hover:text-red-500 transition-colors"
+                onClick={e => e.stopPropagation()}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent onClick={e => e.stopPropagation()}>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Supprimer ce répertoire ?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Voulez-vous vraiment supprimer le répertoire <strong>{list.name}</strong> ? Les contacts qu'il contient ne seront pas supprimés mais n'auront plus de répertoire assigné.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Annuler</AlertDialogCancel>
+                <AlertDialogAction onClick={() => onDelete(list.id)} className="bg-red-600">Supprimer</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </div>
     </div>
   );
 }
