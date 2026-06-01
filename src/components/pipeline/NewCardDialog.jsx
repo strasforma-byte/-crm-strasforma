@@ -48,6 +48,17 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
   const [isCreatingContact, setIsCreatingContact] = useState(false);
   const [quickContact, setQuickContact] = useState({ firstName: "", lastName: "", company: "", email: "", phone: "", siret: "" });
   const [isClientSearchOpen, setIsClientSearchOpen] = useState(false);
+  const [clientSearchTerm, setClientSearchTerm] = useState("");
+
+  const filteredContactsForSearch = useMemo(() => {
+    const contacts = Array.isArray(state.contacts) ? state.contacts : [];
+    if (!clientSearchTerm.trim()) return contacts.slice(0, 50);
+    const term = clientSearchTerm.toLowerCase();
+    return contacts.filter(c => 
+      `${c.firstName} ${c.lastName}`.toLowerCase().includes(term) ||
+      (c.company || "").toLowerCase().includes(term)
+    ).slice(0, 50);
+  }, [state.contacts, clientSearchTerm]);
 
   useEffect(() => {
     if (open) {
@@ -98,6 +109,13 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
 
     if (!state.currentUser) {
       toast.error("Session expirée. Veuillez vous reconnecter.");
+      return;
+    }
+
+    // Check for duplicates in local state to avoid server error
+    const existing = state.contacts.find(c => c.siret === quickContact.siret);
+    if (existing) {
+      toast.error(`Un contact avec ce SIRET existe déjà : ${existing.company} (${existing.firstName} ${existing.lastName})`);
       return;
     }
 
@@ -254,25 +272,27 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
               <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 shadow-xl border-slate-100" align="start">
                 <Command 
                   className="rounded-lg"
-                  filter={(value, search) => {
-                    if (value.toLowerCase().includes(search.toLowerCase())) return 1;
-                    return 0;
-                  }}
+                  shouldFilter={false}
                 >
-                  <CommandInput placeholder="Nom ou Société..." className="h-9 text-xs" />
+                  <CommandInput 
+                    placeholder="Nom ou Société..." 
+                    className="h-9 text-xs"
+                    onValueChange={setClientSearchTerm}
+                  />
                   <CommandList className="max-h-[200px]">
                     <CommandEmpty className="py-2 text-[10px] text-slate-400 text-center">Aucun résultat</CommandEmpty>
                     <CommandGroup>
-                      {state.contacts.map((c) => {
+                      {filteredContactsForSearch.map((c) => {
                         const searchValue = `${c.firstName} ${c.lastName} ${c.company}`.toLowerCase();
                         return (
                           <CommandItem
                             key={c.id}
-                            value={searchValue}
+                            value={c.id}
                             className="py-1 px-2 cursor-pointer"
                             onSelect={() => {
                               setFormData({ ...formData, clientId: c.id });
                               setIsClientSearchOpen(false);
+                              setClientSearchTerm("");
                             }}
                           >
                             <Check
