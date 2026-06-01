@@ -143,11 +143,27 @@ export default function AgendaListView({ baseDate, tasks, proposals, onTaskClick
     }
   };
 
-  // List from -1 day to 14 days from reference date
-  const days = eachDayOfInterval({
-    start: addDays(baseDate || today, -1),
-    end: addDays(baseDate || today, 14),
-  });
+  // Group tasks and proposals by date
+  const groupedData = React.useMemo(() => {
+    const groups = {};
+    
+    [...tasks].sort((a, b) => new Date(a.date) - new Date(b.date)).forEach(task => {
+      const dateKey = task.date;
+      if (!groups[dateKey]) groups[dateKey] = { tasks: [], proposals: [] };
+      groups[dateKey].tasks.push(task);
+    });
+
+    [...proposals].sort((a, b) => new Date(a.proposedDate) - new Date(b.proposedDate)).forEach(prop => {
+      const dateKey = prop.proposedDate.split('T')[0];
+      if (!groups[dateKey]) groups[dateKey] = { tasks: [], proposals: [] };
+      groups[dateKey].proposals.push(prop);
+    });
+
+    return Object.keys(groups).sort().map(date => ({
+      date: new Date(date),
+      ...groups[date]
+    }));
+  }, [tasks, proposals]);
 
   const getDayLabel = (day) => {
     if (isToday(day)) return "Aujourd'hui";
@@ -169,23 +185,23 @@ export default function AgendaListView({ baseDate, tasks, proposals, onTaskClick
   return (
     <ScrollArea className="flex-1">
       <div className="p-6 space-y-8">
-        {days.map((day, idx) => {
-          const dayTasks = tasks.filter(t => isSameDay(new Date(t.date), day));
-          const dayProposals = proposals.filter(p => isSameDay(new Date(p.proposedDate), day));
-
-          if (dayTasks.length === 0 && dayProposals.length === 0) return null;
-
-          return (
+        {groupedData.length === 0 ? (
+          <div className="h-40 flex flex-col items-center justify-center text-slate-400 gap-2">
+            <Bookmark className="w-8 h-8 opacity-20" />
+            <p className="text-sm italic">Aucune action planifiée pour le moment.</p>
+          </div>
+        ) : (
+          groupedData.map((group, idx) => (
             <div key={idx} className="space-y-4">
               <div className="flex items-center gap-4">
-                <h3 className={`text-sm font-bold uppercase tracking-widest ${isToday(day) ? 'text-green-600' : 'text-slate-500'}`}>
-                  {getDayLabel(day)}
+                <h3 className={`text-sm font-bold uppercase tracking-widest ${isToday(group.date) ? 'text-green-600' : 'text-slate-500'}`}>
+                  {getDayLabel(group.date)}
                 </h3>
                 <Separator className="flex-1" />
               </div>
 
               <div className="grid gap-3">
-                {dayTasks.map(task => (
+                {group.tasks.map(task => (
                   <Card 
                     key={task.id} 
                     className={`p-4 cursor-pointer hover:bg-slate-50 transition-all group border-l-4 ${task.status === 'done' ? 'opacity-60 border-l-slate-300' : 'border-l-green-600'}`}
@@ -250,7 +266,7 @@ export default function AgendaListView({ baseDate, tasks, proposals, onTaskClick
                   </Card>
                 ))}
 
-                {dayProposals.map(prop => (
+                {group.proposals.map(prop => (
                   <Card 
                     key={prop.id} 
                     className="p-4 cursor-pointer hover:bg-slate-50 transition-colors border-l-4 border-l-amber-400 bg-amber-50/30"
@@ -272,8 +288,8 @@ export default function AgendaListView({ baseDate, tasks, proposals, onTaskClick
                 ))}
               </div>
             </div>
-          );
-        })}
+          ))
+        )}
       </div>
     </ScrollArea>
   );
