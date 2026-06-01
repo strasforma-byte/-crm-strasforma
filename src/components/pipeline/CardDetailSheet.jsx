@@ -64,6 +64,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
     value: 0,
     fundingSource: "",
     responsibleId: "",
+    pipelineId: "",
     columnId: "",
     notes: "",
     tags: []
@@ -85,12 +86,13 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
         value: card.value,
         fundingSource: card.fundingSource || "FOND PROPRE",
         responsibleId: card.responsibleId,
+        pipelineId: pipeline?.id || "",
         columnId: card.columnId,
         notes: card.notes || "",
         tags: Array.isArray(card.tags) ? card.tags : []
       });
     }
-  }, [card, open]);
+  }, [card, open, pipeline]);
 
   const toggleTag = (tagValue) => {
     setFormData(prev => ({
@@ -154,37 +156,58 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
       const updatedDbCard = await db.updateCard(card.id, {
         ...card,
         ...formData,
-        contactId: formData.clientId, // Force la mise à jour du contactId
+        contactId: formData.clientId,
       });
 
-      // Map DB response to local state structure
       const updatedCard = {
         ...updatedDbCard,
-        clientId: updatedDbCard.contactId, // Fallback pour la synchronisation
+        clientId: updatedDbCard.contactId,
       };
 
       const updatedPipelines = state.pipelines.map(p => {
+        // Source Pipeline (where the card currently is in state)
         if (p.id === pipeline.id) {
+          const newColumns = p.columns.map(col => {
+            // Remove from old column
+            if (col.id === card.columnId) {
+              return { ...col, cards: (col.cards || []).filter(c => c.id !== card.id) };
+            }
+            return col;
+          });
+
+          // If source and target are the same, we also need to add/update in this same pipeline object
+          if (pipeline.id === formData.pipelineId) {
+            return {
+              ...p,
+              columns: newColumns.map(col => {
+                if (col.id === formData.columnId) {
+                  const isUpdate = (col.cards || []).find(c => c.id === card.id);
+                  if (isUpdate) {
+                    return { ...col, cards: col.cards.map(c => c.id === card.id ? updatedCard : c) };
+                  } else {
+                    return { ...col, cards: [...(col.cards || []), updatedCard] };
+                  }
+                }
+                return col;
+              })
+            };
+          }
+          return { ...p, columns: newColumns };
+        }
+
+        // Target Pipeline (if different from source)
+        if (p.id === formData.pipelineId && pipeline.id !== formData.pipelineId) {
           return {
             ...p,
             columns: p.columns.map(col => {
-              // Remove from old column if changed
-              if (col.id === card.columnId && col.id !== formData.columnId) {
-                return { ...col, cards: (col.cards || []).filter(c => c.id !== card.id) };
-              }
-              // Add to new column or update in same
               if (col.id === formData.columnId) {
-                const isUpdate = (col.cards || []).find(c => c.id === card.id);
-                if (isUpdate) {
-                  return { ...col, cards: col.cards.map(c => c.id === card.id ? updatedCard : c) };
-                } else {
-                  return { ...col, cards: [...(col.cards || []), updatedCard] };
-                }
+                return { ...col, cards: [...(col.cards || []), updatedCard] };
               }
               return col;
             })
           };
         }
+
         return p;
       });
 
@@ -413,18 +436,41 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Étape du pipeline</Label>
-                  <Select value={formData.columnId} onValueChange={val => setFormData({...formData, columnId: val})}>
-                    <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {pipeline?.columns?.map(col => (
-                        <SelectItem key={col.id} value={col.id} className="text-xs">{col.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Pipeline</Label>
+                    <Select value={formData.pipelineId} onValueChange={val => {
+                      const newPipeline = state.pipelines.find(p => p.id === val);
+                      setFormData({
+                        ...formData, 
+                        pipelineId: val, 
+                        columnId: newPipeline?.columns?.[0]?.id || ""
+                      });
+                    }}>
+                      <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {state.pipelines.map(p => (
+                          <SelectItem key={p.id} value={p.id} className="text-xs">{p.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Étape</Label>
+                    <Select value={formData.columnId} onValueChange={val => setFormData({...formData, columnId: val})}>
+                      <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {state.pipelines.find(p => p.id === formData.pipelineId)?.columns?.map(col => (
+                          <SelectItem key={col.id} value={col.id} className="text-xs">{col.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
             </div>
