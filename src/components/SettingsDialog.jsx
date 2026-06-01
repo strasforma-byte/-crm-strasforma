@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Download, Trash2, RefreshCw } from "lucide-react";
+import { Download, Trash2, RefreshCw, Shield } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
@@ -108,34 +108,46 @@ export default function SettingsDialog({ open, onOpenChange }) {
 
           <Separator />
 
-          <div className="space-y-3">
-            <Label>Actions de données</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <Button variant="outline" size="sm" onClick={handleExport} className="text-xs">
-                <Download className="w-3 h-3 mr-2" />
-                Exporter JSON
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <Label className="text-sm font-bold flex items-center gap-2">
+                <Shield className="w-4 h-4 text-green-600" />
+                Sécurité & Données
+              </Label>
+              <p className="text-[10px] text-slate-500 leading-relaxed">
+                Vos données sont stockées en temps réel sur Supabase (serveurs sécurisés). 
+                Nous vous conseillons de télécharger une sauvegarde manuelle régulièrement.
+              </p>
+            </div>
+            
+            <div className="grid grid-cols-1 gap-2">
+              <Button variant="outline" size="sm" onClick={handleExport} className="text-xs font-bold border-green-100 hover:bg-green-50 text-green-700 h-10">
+                <Download className="w-4 h-4 mr-2" />
+                Télécharger une Sauvegarde Complète (JSON)
               </Button>
               
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button variant="outline" size="sm" className="text-xs text-red-600 hover:text-red-700">
-                    <RefreshCw className="w-3 h-3 mr-2" />
-                    Réinitialiser
-                  </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Êtes-vous sûr ?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Cette action supprimera toutes les données locales et rechargera les données de démonstration.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Annuler</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleReset} className="bg-red-600">Réinitialiser</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+              {isAdmin && (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-[10px] text-slate-400 hover:text-red-600 font-bold h-8">
+                      <RefreshCw className="w-3 h-3 mr-2" />
+                      Réinitialiser le cache local
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Réinitialiser le cache ?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Cette action ne supprimera pas vos données sur le serveur, mais forcera l'application à recharger toutes les informations.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Annuler</AlertDialogCancel>
+                      <AlertDialogAction onClick={handleReset} className="bg-red-600 text-white">Confirmer</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              )}
             </div>
           </div>
         </div>
