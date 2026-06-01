@@ -116,7 +116,7 @@ export default function ContactsView({ jumpToId, onJumpHandled }) {
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 15;
+  const itemsPerPage = 50;
 
   // Dialog State
   const [isSheetOpen, setIsSheetOpen] = useState(false);
