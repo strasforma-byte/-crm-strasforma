@@ -61,7 +61,8 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
         }
       }
 
-      setFormData({
+      setFormData(prev => ({
+        ...prev,
         title: "",
         clientId: defaultContactId || "",
         value: "",
@@ -69,9 +70,9 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
         pipelineId: pipeId,
         columnId: defaultColumnId || (pipeline && pipeline.columns && pipeline.columns[0]?.id) || "",
         responsibleId: initialResponsibleId
-      });
+      }));
     }
-  }, [open, defaultPipelineId, defaultContactId, defaultColumnId, state.pipelines, state.currentUser, state.contacts]);
+  }, [open, defaultPipelineId, defaultContactId, defaultColumnId]);
 
   // Intelligent Auto-Assignment when clientId changes manually
   useEffect(() => {
@@ -110,7 +111,7 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
       
       const savedContact = await db.insertContact(newContactData);
       dispatch({ type: "UPDATE_CONTACTS", payload: [...state.contacts, savedContact] });
-      setFormData({ ...formData, clientId: savedContact.id });
+      setFormData(prev => ({ ...prev, clientId: savedContact.id }));
       setIsQuickContactOpen(false);
       setQuickContact({ firstName: "", lastName: "", company: "", email: "", phone: "", siret: "" });
       toast.success("Contact créé et sélectionné");
