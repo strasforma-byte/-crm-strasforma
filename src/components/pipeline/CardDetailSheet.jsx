@@ -26,7 +26,8 @@ import {
   MessageSquare,
   CheckCircle2,
   Fingerprint,
-  Tag as TagIcon
+  Tag as TagIcon,
+  Loader2
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -71,6 +72,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
   });
 
   const [isQuickContactOpen, setIsQuickContactOpen] = useState(false);
+  const [isCreatingContact, setIsCreatingContact] = useState(false);
   const [quickContact, setQuickContact] = useState({ firstName: "", lastName: "", company: "", email: "", phone: "", siret: "" });
   const [isClientSearchOpen, setIsClientSearchOpen] = useState(false);
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
@@ -120,16 +122,23 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
       toast.error("Le Nom, la Société et le SIRET sont obligatoires");
       return;
     }
+
+    if (!state.currentUser) {
+      toast.error("Session expirée. Veuillez vous reconnecter.");
+      return;
+    }
+
+    setIsCreatingContact(true);
     
     try {
       const newContactData = {
         createdBy: state.currentUser.id,
         listId: "list-default",
-        firstName: quickContact.firstName,
+        firstName: quickContact.firstName || "",
         lastName: quickContact.lastName,
         company: quickContact.company,
-        email: quickContact.email,
-        phone: quickContact.phone,
+        email: quickContact.email || "",
+        phone: quickContact.phone || "",
         siret: quickContact.siret,
         tags: ["prospect"],
         interactions: [],
@@ -143,7 +152,10 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
       setQuickContact({ firstName: "", lastName: "", company: "", email: "", phone: "", siret: "" });
       toast.success("Contact créé et sélectionné");
     } catch (error) {
-      toast.error("Erreur lors de la création du contact");
+      console.error("Contact creation error:", error);
+      toast.error("Erreur lors de la création du contact. Vérifiez si le SIRET n'existe pas déjà.");
+    } finally {
+      setIsCreatingContact(false);
     }
   };
 
@@ -623,6 +635,59 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
         defaultContactId={formData.clientId}
         defaultCardId={card.id}
       />
+
+      <Dialog open={isQuickContactOpen} onOpenChange={setIsQuickContactOpen}>
+        <DialogContent className="sm:max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>Créer un contact rapidement</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Prénom</Label>
+                <Input value={quickContact.firstName} onChange={e => setQuickContact({...quickContact, firstName: e.target.value})} />
+              </div>
+              <div className="space-y-2">
+                <Label>Nom *</Label>
+                <Input value={quickContact.lastName} onChange={e => setQuickContact({...quickContact, lastName: e.target.value})} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Entreprise *</Label>
+              <div className="relative">
+                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input className="pl-10" value={quickContact.company} onChange={e => setQuickContact({...quickContact, company: e.target.value})} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>SIRET *</Label>
+              <div className="relative">
+                <Fingerprint className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input className="pl-10" value={quickContact.siret} onChange={e => setQuickContact({...quickContact, siret: e.target.value})} />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input type="email" value={quickContact.email} onChange={e => setQuickContact({...quickContact, email: e.target.value})} />
+            </div>
+            <div className="space-y-2">
+              <Label>Téléphone</Label>
+              <Input value={quickContact.phone} onChange={e => setQuickContact({...quickContact, phone: e.target.value})} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsQuickContactOpen(false)}>Annuler</Button>
+            <Button className="bg-green-600" onClick={handleQuickContactCreate} disabled={isCreatingContact}>
+              {isCreatingContact ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Création...
+                </>
+              ) : "Créer et sélectionner"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 }
