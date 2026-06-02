@@ -55,48 +55,63 @@ export function AppProvider({ children }) {
 
   const fetchExternalCalendar = async (url) => {
     if (!url) {
+      console.log("No calendar URL provided, clearing external events.");
       dispatch({ type: "UPDATE_EXTERNAL_EVENTS", payload: [] });
       return;
     }
 
     try {
-      console.log("Fetching external calendar from:", url);
-      // Use a CORS proxy because Google Calendar blocks direct browser access
+      console.log("--- GOOGLE CALENDAR SYNC START ---");
+      console.log("Original URL:", url);
+      
       const proxyUrl = "https://corsproxy.io/?";
-      const response = await fetch(proxyUrl + encodeURIComponent(url));
+      const fullUrl = proxyUrl + encodeURIComponent(url.trim());
+      console.log("Fetching via proxy:", fullUrl);
+
+      const response = await fetch(fullUrl);
+      console.log("Response status:", response.status, response.statusText);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
       const data = await response.text();
-      console.log("Calendar data received (first 100 chars):", data.substring(0, 100));
+      console.log("Data length received:", data.length);
+      
+      if (!data || !data.includes("BEGIN:VCALENDAR")) {
+        console.error("Data received is not a valid iCalendar file:", data.substring(0, 200));
+        throw new Error("Format iCal invalide");
+      }
       
       const jcalData = ICAL.parse(data);
       const comp = new ICAL.Component(jcalData);
       const vevents = comp.getAllSubcomponents('vevent');
-      console.log(`Found ${vevents.length} events in calendar`);
+      console.log(`Successfully parsed ${vevents.length} events`);
       
       const mappedEvents = vevents.map(veventComp => {
         const event = new ICAL.Event(veventComp);
         const startDate = event.startDate.toJSDate();
         
         return {
-          id: event.uid,
+          id: event.uid || Math.random().toString(36).substr(2, 9),
           title: "🗓️ " + (event.summary || "Occupation Google"),
           description: event.description,
           dueDate: startDate.toISOString(),
           date: startDate.toISOString().split('T')[0],
           time: `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`,
           type: 'google',
+          userId: state.currentUser?.id, // Assurer que l'événement appartient à l'utilisateur courant
           status: 'external'
         };
       });
         
+      console.log("Sample mapped event:", mappedEvents[0]);
+      console.log("--- GOOGLE CALENDAR SYNC SUCCESS ---");
       dispatch({ type: "UPDATE_EXTERNAL_EVENTS", payload: mappedEvents });
     } catch (error) {
-      console.error("Could not fetch external calendar:", error);
-      toast.error("Impossible de charger l'agenda Google (Erreur de connexion ou de lien)");
+      console.error("--- GOOGLE CALENDAR SYNC ERROR ---");
+      console.error(error);
+      toast.error("Impossible de charger l'agenda Google : " + error.message);
     }
   };
 
