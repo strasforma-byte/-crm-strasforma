@@ -60,11 +60,22 @@ export function AppProvider({ children }) {
     }
 
     try {
-      const response = await fetch(url);
+      console.log("Fetching external calendar from:", url);
+      // Use a CORS proxy because Google Calendar blocks direct browser access
+      const proxyUrl = "https://corsproxy.io/?";
+      const response = await fetch(proxyUrl + encodeURIComponent(url));
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
       const data = await response.text();
+      console.log("Calendar data received (first 100 chars):", data.substring(0, 100));
+      
       const jcalData = ICAL.parse(data);
       const comp = new ICAL.Component(jcalData);
       const vevents = comp.getAllSubcomponents('vevent');
+      console.log(`Found ${vevents.length} events in calendar`);
       
       const mappedEvents = vevents.map(veventComp => {
         const event = new ICAL.Event(veventComp);
@@ -72,7 +83,7 @@ export function AppProvider({ children }) {
         
         return {
           id: event.uid,
-          title: event.summary,
+          title: "🗓️ " + (event.summary || "Occupation Google"),
           description: event.description,
           dueDate: startDate.toISOString(),
           date: startDate.toISOString().split('T')[0],
@@ -84,7 +95,8 @@ export function AppProvider({ children }) {
         
       dispatch({ type: "UPDATE_EXTERNAL_EVENTS", payload: mappedEvents });
     } catch (error) {
-      console.warn("Could not fetch external calendar:", error);
+      console.error("Could not fetch external calendar:", error);
+      toast.error("Impossible de charger l'agenda Google (Erreur de connexion ou de lien)");
     }
   };
 
