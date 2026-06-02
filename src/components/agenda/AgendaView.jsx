@@ -8,6 +8,7 @@ import { addDays, subDays, addMonths, subMonths, format, startOfWeek, endOfWeek 
 import { fr } from "date-fns/locale";
 import { Calendar, List, Columns, Plus, User as UserIcon, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { toast } from "sonner";
 import AgendaMonthView from "./AgendaMonthView";
 import AgendaWeekView from "./AgendaWeekView";
 import AgendaListView from "./AgendaListView";
@@ -15,7 +16,7 @@ import TaskDialog from "./TaskDialog";
 import ProposalSheet from "./ProposalSheet";
 
 export default function AgendaView() {
-  const { state, dispatch, isAdmin, isProspecteur, isCommercial } = useApp();
+  const { state, dispatch, isAdmin, isProspecteur, isCommercial, refreshAllData } = useApp();
   const { canViewUserAgenda } = usePermissions();
 
   const [view, setView] = useState("week");
