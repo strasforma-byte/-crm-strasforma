@@ -2,7 +2,7 @@ import React, { createContext, useContext, useReducer, useEffect, useState } fro
 import { supabase } from "@/lib/supabase";
 import { db } from "@/lib/db";
 import { toast } from "sonner";
-import ical from "node-ical";
+import ICAL from "ical.js";
 
 const AppContext = createContext();
 
@@ -60,29 +60,31 @@ export function AppProvider({ children }) {
     }
 
     try {
-      // Proxying via a CORS service might be needed if Google Calendar blocks direct browser access
-      // For now, let's try direct fetch
       const response = await fetch(url);
       const data = await response.text();
-      const events = ical.parseICS(data);
+      const jcalData = ICAL.parse(data);
+      const comp = new ICAL.Component(jcalData);
+      const vevents = comp.getAllSubcomponents('vevent');
       
-      const mappedEvents = Object.values(events)
-        .filter(event => event.type === 'VEVENT')
-        .map(event => ({
+      const mappedEvents = vevents.map(veventComp => {
+        const event = new ICAL.Event(veventComp);
+        const startDate = event.startDate.toJSDate();
+        
+        return {
           id: event.uid,
           title: event.summary,
           description: event.description,
-          dueDate: event.start.toISOString(),
-          date: event.start.toISOString().split('T')[0],
-          time: event.start.toISOString().split('T')[1].substring(0, 5),
+          dueDate: startDate.toISOString(),
+          date: startDate.toISOString().split('T')[0],
+          time: `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`,
           type: 'google',
           status: 'external'
-        }));
+        };
+      });
         
       dispatch({ type: "UPDATE_EXTERNAL_EVENTS", payload: mappedEvents });
     } catch (error) {
       console.warn("Could not fetch external calendar:", error);
-      // Fallback: Silent error to not disturb the user if the URL is wrong or CORS blocked
     }
   };
 

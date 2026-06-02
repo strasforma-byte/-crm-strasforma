@@ -120,7 +120,7 @@ export default function SettingsDialog({ open, onOpenChange }) {
               onChange={(e) => setCalendarUrl(e.target.value)} 
             />
             <p className="text-[10px] text-slate-500">
-              Pour voir vos RDV Google ici : Paramètres Google Agenda > Intégrer l'agenda > Adresse secrète au format iCal.
+              Pour voir vos RDV Google ici : Paramètres Google Agenda &gt; Intégrer l'agenda &gt; Adresse secrète au format iCal.
             </p>
           </div>
 
