@@ -6,7 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { addDays, subDays, addMonths, subMonths, format, startOfWeek, endOfWeek } from "date-fns";
 import { fr } from "date-fns/locale";
-import { Calendar, List, Columns, Plus, User as UserIcon, ChevronLeft, ChevronRight } from "lucide-react";
+import { Calendar, List, Columns, Plus, User as UserIcon, ChevronLeft, ChevronRight, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import AgendaMonthView from "./AgendaMonthView";
 import AgendaWeekView from "./AgendaWeekView";
@@ -25,6 +25,13 @@ export default function AgendaView() {
   const [selectedTask, setSelectedTask] = useState(null);
   const [isProposalSheetOpen, setIsProposalSheetOpen] = useState(false);
   const [selectedProposal, setSelectedProposal] = useState(null);
+
+  // Synchronize targetUserId when currentUser changes (e.g. after login)
+  React.useEffect(() => {
+    if (state.currentUser?.id && !targetUserId) {
+      setTargetUserId(state.currentUser.id);
+    }
+  }, [state.currentUser?.id, targetUserId]);
 
   const handlePrev = () => {
     if (view === "month") setBaseDate(subMonths(baseDate, 1));
@@ -57,22 +64,22 @@ export default function AgendaView() {
     const internalTasks = state.tasks.filter(t => t.userId === targetUserId);
     
     // If viewing own agenda, add external events
-    if (targetUserId === state.currentUser?.id && state.externalEvents) {
+    if (targetUserId === state.currentUser?.id && Array.isArray(state.externalEvents)) {
       return [...internalTasks, ...state.externalEvents];
     }
     
     return internalTasks;
   }, [state.tasks, state.externalEvents, targetUserId, state.currentUser?.id]);
 
-  const userProposals = useMemo(() => {
-    return state.rdvProposals.filter(p => p.commercialId === targetUserId || p.prospectorId === targetUserId);
-  }, [state.rdvProposals, targetUserId]);
-
-  const commercialsWithSharedAgenda = useMemo(() => {
-    return state.users.filter(u => u.role === "commercial" && (u.settings?.shareAgendaWithProspectors || isAdmin));
-  }, [state.users, isAdmin]);
+  const hasGoogleSync = !!state.currentUser?.settings?.calendarUrl;
 
   const handleOpenTask = (task) => {
+    if (task.type === 'google') {
+      toast.info("Événement Google Calendar", {
+        description: "Cet événement est en lecture seule depuis votre Google Agenda."
+      });
+      return;
+    }
     setSelectedTask(task);
     setIsTaskDialogOpen(true);
   };
@@ -88,11 +95,31 @@ export default function AgendaView() {
         <div className="flex flex-wrap items-center gap-4">
           <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
             Agenda
-            <Badge variant="outline" className="text-[10px] font-black text-slate-400 border-slate-200 uppercase tracking-widest px-2 py-0.5">
-              {userTasks.length} ACTIONS
-            </Badge>
+            <div className="flex gap-2">
+              <Badge variant="outline" className="text-[10px] font-black text-slate-400 border-slate-200 uppercase tracking-widest px-2 py-0.5">
+                {userTasks.length} ACTIONS
+              </Badge>
+              {hasGoogleSync && targetUserId === state.currentUser?.id && (
+                <Badge className="text-[10px] font-black bg-blue-50 text-blue-600 border-blue-100 uppercase tracking-widest px-2 py-0.5 flex items-center gap-1">
+                  <div className="w-1 h-1 rounded-full bg-blue-500 animate-pulse" />
+                  Google Sync
+                </Badge>
+              )}
+            </div>
           </h2>
           
+          {hasGoogleSync && targetUserId === state.currentUser?.id && (
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              className="h-8 px-2 text-[9px] font-bold text-blue-600 hover:bg-blue-50"
+              onClick={() => refreshAllData()}
+            >
+              <RefreshCw className="w-3 h-3 mr-1" />
+              SYNCHRO
+            </Button>
+          )}
+
           <div className="flex items-center gap-2 bg-white border border-slate-200 p-1 rounded-xl shadow-sm">
             <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-slate-50" onClick={handlePrev}>
               <ChevronLeft className="w-4 h-4 text-slate-600" />
