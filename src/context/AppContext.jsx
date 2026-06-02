@@ -94,21 +94,28 @@ export function AppProvider({ children }) {
       console.log(`Successfully parsed ${vevents.length} events`);
       
       const mappedEvents = vevents.map(veventComp => {
-        const event = new ICAL.Event(veventComp);
-        const startDate = event.startDate.toJSDate();
-        
-        return {
-          id: event.uid || Math.random().toString(36).substr(2, 9),
-          title: "🗓️ " + (event.summary || "Occupation Google"),
-          description: event.description,
-          dueDate: startDate.toISOString(),
-          date: startDate.toISOString().split('T')[0],
-          time: `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`,
-          type: 'google',
-          userId: state.currentUser?.id, // Assurer que l'événement appartient à l'utilisateur courant
-          status: 'external'
-        };
-      });
+        try {
+          const event = new ICAL.Event(veventComp);
+          if (!event.startDate) return null;
+          
+          const startDate = event.startDate.toJSDate();
+          
+          return {
+            id: event.uid || Math.random().toString(36).substr(2, 9),
+            title: "🗓️ " + (event.summary || "Occupation Google"),
+            description: event.description || "",
+            dueDate: startDate.toISOString(),
+            date: startDate.toISOString().split('T')[0],
+            time: `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`,
+            type: 'google',
+            userId: state.currentUser?.id,
+            status: 'external'
+          };
+        } catch (e) {
+          console.warn("Error parsing individual event:", e);
+          return null;
+        }
+      }).filter(Boolean);
         
       console.log("Sample mapped event:", mappedEvents[0]);
       console.log("--- GOOGLE CALENDAR SYNC SUCCESS ---");
@@ -133,11 +140,9 @@ export function AppProvider({ children }) {
         currentUserId ? db.getNotifications(currentUserId) : Promise.resolve([])
       ]);
 
-      /*
       if (state.currentUser?.settings?.calendarUrl) {
         fetchExternalCalendar(state.currentUser.settings.calendarUrl);
       }
-      */
 
       dispatch({
         type: "INIT_DATA",
