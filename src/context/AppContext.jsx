@@ -64,19 +64,23 @@ export function AppProvider({ children }) {
       console.log("--- GOOGLE CALENDAR SYNC START ---");
       console.log("Original URL:", url);
       
-      const proxyUrl = "https://corsproxy.io/?";
-      const fullUrl = proxyUrl + encodeURIComponent(url.trim());
-      console.log("Fetching via proxy:", fullUrl);
+      // Attempting with a different proxy service: AllOrigins
+      // Adding a timestamp to bypass proxy caching
+      const timestamp = new Date().getTime();
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url.trim() + (url.includes('?') ? '&' : '?') + 't=' + timestamp)}`;
+      
+      console.log("Fetching via AllOrigins proxy...");
 
-      const response = await fetch(fullUrl);
-      console.log("Response status:", response.status, response.statusText);
+      const response = await fetch(proxyUrl);
       
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
       
-      const data = await response.text();
-      console.log("Data length received:", data.length);
+      const json = await response.json();
+      const data = json.contents;
+
+      console.log("Data length received:", data?.length || 0);
       
       if (!data || !data.includes("BEGIN:VCALENDAR")) {
         console.error("Data received is not a valid iCalendar file:", data.substring(0, 200));
