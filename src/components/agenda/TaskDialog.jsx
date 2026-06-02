@@ -19,7 +19,8 @@ import {
   ChevronsUpDown, 
   Fingerprint,
   User as UserIcon,
-  Briefcase
+  Briefcase,
+  Loader2
 } from "lucide-react";
 import { 
   Command, 
@@ -50,6 +51,7 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
   });
 
   const [isQuickContactOpen, setIsQuickContactOpen] = useState(false);
+  const [isCreatingContact, setIsCreatingContact] = useState(false);
   const [quickContact, setQuickContact] = useState({ firstName: "", lastName: "", company: "", email: "", phone: "", siret: "" });
   const [isClientSearchOpen, setIsClientSearchOpen] = useState(false);
 
@@ -83,20 +85,37 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
   );
 
   const handleQuickContactCreate = async () => {
+    if (isCreatingContact) return;
+
     if (!quickContact.lastName || !quickContact.company || !quickContact.siret) {
       toast.error("Le Nom, la Société et le SIRET sont obligatoires");
       return;
     }
+
+    if (!state.currentUser) {
+      toast.error("Session expirée. Veuillez vous reconnecter.");
+      return;
+    }
+
+    // Check for duplicates in local state to avoid server error
+    const contacts = Array.isArray(state.contacts) ? state.contacts : [];
+    const existing = contacts.find(c => c.siret === quickContact.siret);
+    if (existing) {
+      toast.error(`Un contact avec ce SIRET existe déjà : ${existing.company} (${existing.firstName} ${existing.lastName})`);
+      return;
+    }
+
+    setIsCreatingContact(true);
     
     try {
       const newContactData = {
         createdBy: state.currentUser.id,
         listId: "list-default",
-        firstName: quickContact.firstName,
+        firstName: quickContact.firstName || "",
         lastName: quickContact.lastName,
         company: quickContact.company,
-        email: quickContact.email,
-        phone: quickContact.phone,
+        email: quickContact.email || "",
+        phone: quickContact.phone || "",
         siret: quickContact.siret,
         tags: ["prospect"],
         interactions: [],
@@ -104,13 +123,21 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
       };
       
       const savedContact = await db.insertContact(newContactData);
-      dispatch({ type: "UPDATE_CONTACTS", payload: [...state.contacts, savedContact] });
+      
+      if (!savedContact) {
+        throw new Error("La création a échoué (réponse vide)");
+      }
+
+      dispatch({ type: "UPDATE_CONTACTS", payload: [...contacts, savedContact] });
       setFormData({ ...formData, linkedContactId: savedContact.id });
       setIsQuickContactOpen(false);
       setQuickContact({ firstName: "", lastName: "", company: "", email: "", phone: "", siret: "" });
       toast.success("Contact créé et sélectionné");
     } catch (error) {
-      toast.error("Erreur lors de la création du contact");
+      console.error("Contact creation error:", error);
+      toast.error(`Erreur : ${error.message || "Problème lors de la création"}`);
+    } finally {
+      setIsCreatingContact(false);
     }
   };
 
@@ -563,7 +590,14 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsQuickContactOpen(false)}>Annuler</Button>
-            <Button className="bg-green-600" onClick={handleQuickContactCreate}>Créer et sélectionner</Button>
+            <Button className="bg-green-600" onClick={handleQuickContactCreate} disabled={isCreatingContact}>
+              {isCreatingContact ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Création...
+                </>
+              ) : "Créer et sélectionner"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

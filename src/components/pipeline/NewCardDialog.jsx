@@ -102,6 +102,8 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
   }, [formData.clientId, state.contacts, state.users]);
 
   const handleQuickContactCreate = async () => {
+    if (isCreatingContact) return;
+
     if (!quickContact.lastName || !quickContact.company || !quickContact.siret) {
       toast.error("Le Nom, la Société et le SIRET sont obligatoires");
       return;
@@ -113,7 +115,8 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
     }
 
     // Check for duplicates in local state to avoid server error
-    const existing = state.contacts.find(c => c.siret === quickContact.siret);
+    const contacts = Array.isArray(state.contacts) ? state.contacts : [];
+    const existing = contacts.find(c => c.siret === quickContact.siret);
     if (existing) {
       toast.error(`Un contact avec ce SIRET existe déjà : ${existing.company} (${existing.firstName} ${existing.lastName})`);
       return;
@@ -138,8 +141,12 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
       
       const savedContact = await db.insertContact(newContactData);
       
+      if (!savedContact) {
+        throw new Error("La création a échoué (réponse vide)");
+      }
+
       // Use latest state to avoid losing other newly created contacts in rapid succession
-      dispatch({ type: "UPDATE_CONTACTS", payload: [...state.contacts, savedContact] });
+      dispatch({ type: "UPDATE_CONTACTS", payload: [...contacts, savedContact] });
       
       setFormData(prev => ({ ...prev, clientId: savedContact.id }));
       setIsQuickContactOpen(false);
@@ -147,7 +154,7 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
       toast.success("Contact créé et sélectionné");
     } catch (error) {
       console.error("Contact creation error:", error);
-      toast.error("Erreur lors de la création du contact. Vérifiez si le SIRET n'existe pas déjà.");
+      toast.error(`Erreur : ${error.message || "Vérifiez si le SIRET n'existe pas déjà."}`);
     } finally {
       setIsCreatingContact(false);
     }

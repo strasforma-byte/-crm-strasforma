@@ -1,25 +1,28 @@
 import { supabase } from './supabase'
 
 // Mapping helpers
-const mapContact = (c) => ({
-  id: c.id,
-  firstName: c.first_name,
-  lastName: c.last_name,
-  company: c.company,
-  siret: c.siret,
-  postalCode: c.postal_code,
-  phone: c.phone,
-  email: c.email,
-  industry: c.industry,
-  tags: c.tags || [],
-  notes: c.notes,
-  listId: c.list_id,
-  assignedAgentId: c.assigned_agent_id,
-  createdBy: c.created_by,
-  interactions: c.interactions || [],
-  createdAt: c.created_at,
-  lastModified: c.last_modified
-})
+const mapContact = (c) => {
+  if (!c) return null;
+  return {
+    id: c.id,
+    firstName: c.first_name,
+    lastName: c.last_name,
+    company: c.company,
+    siret: c.siret,
+    postalCode: c.postal_code,
+    phone: c.phone,
+    email: c.email,
+    industry: c.industry,
+    tags: c.tags || [],
+    notes: c.notes,
+    listId: c.list_id,
+    assignedAgentId: c.assigned_agent_id,
+    createdBy: c.created_by,
+    interactions: c.interactions || [],
+    createdAt: c.created_at,
+    lastModified: c.last_modified
+  };
+}
 
 const cleanId = (id) => {
   if (!id || id === "" || id === "none" || id === "null" || id === "undefined") return null;
@@ -35,12 +38,12 @@ const toDbContact = (c) => ({
   phone: c.phone,
   email: c.email,
   industry: c.industry,
-  tags: c.tags,
+  tags: Array.isArray(c.tags) ? c.tags : [],
   notes: c.notes,
   list_id: (c.listId === 'list-default' || !c.listId) ? null : c.listId,
   assigned_agent_id: cleanId(c.assignedAgentId),
   created_by: cleanId(c.createdBy),
-  interactions: c.interactions || [],
+  interactions: Array.isArray(c.interactions) ? c.interactions : [],
   last_modified: new Date().toISOString()
 })
 
@@ -178,9 +181,21 @@ export const db = {
   },
 
   async insertContact(contact) {
-    const { data, error } = await supabase.from('contacts').insert(toDbContact(contact)).select().single()
-    if (error) throw error
-    return mapContact(data)
+    try {
+      const dbData = toDbContact(contact);
+      const { data, error } = await supabase.from('contacts').insert(dbData).select().single()
+      if (error) {
+        console.error("Supabase insertContact error:", error);
+        throw error;
+      }
+      if (!data) {
+        throw new Error("Le serveur n'a pas retourné le contact créé.");
+      }
+      return mapContact(data)
+    } catch (err) {
+      console.error("Error in insertContact:", err);
+      throw err;
+    }
   },
 
   async bulkInsertContacts(contacts) {
