@@ -20,6 +20,7 @@ export default function SettingsDialog({ open, onOpenChange }) {
   const [name, setName] = useState(user?.name || "");
   const [color, setColor] = useState(user?.color || COLORS[0]);
   const [shareAgenda, setShareAgenda] = useState(user?.settings?.shareAgendaWithProspectors || false);
+  const [calendarUrl, setCalendarUrl] = useState(user?.settings?.calendarUrl || "");
 
   if (!user) return null;
 
@@ -28,7 +29,11 @@ export default function SettingsDialog({ open, onOpenChange }) {
       const updatedProfile = {
         name,
         color,
-        settings: { ...user.settings, shareAgendaWithProspectors: shareAgenda }
+        settings: { 
+          ...user.settings, 
+          shareAgendaWithProspectors: shareAgenda,
+          calendarUrl: calendarUrl
+        }
       };
 
       await db.updateUserProfile(user.id, updatedProfile);
@@ -105,6 +110,19 @@ export default function SettingsDialog({ open, onOpenChange }) {
               <Switch checked={shareAgenda} onCheckedChange={setShareAgenda} />
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label htmlFor="calendar-url">Lien iCal Google Calendar</Label>
+            <Input 
+              id="calendar-url" 
+              placeholder="https://calendar.google.com/calendar/ical/..." 
+              value={calendarUrl} 
+              onChange={(e) => setCalendarUrl(e.target.value)} 
+            />
+            <p className="text-[10px] text-slate-500">
+              Pour voir vos RDV Google ici : Paramètres Google Agenda > Intégrer l'agenda > Adresse secrète au format iCal.
+            </p>
+          </div>
 
           <Separator />
 

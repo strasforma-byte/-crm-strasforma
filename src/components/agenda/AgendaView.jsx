@@ -54,8 +54,15 @@ export default function AgendaView() {
   const targetUser = state.users.find(u => u.id === targetUserId);
   
   const userTasks = useMemo(() => {
-    return state.tasks.filter(t => t.userId === targetUserId);
-  }, [state.tasks, targetUserId]);
+    const internalTasks = state.tasks.filter(t => t.userId === targetUserId);
+    
+    // If viewing own agenda, add external events
+    if (targetUserId === state.currentUser?.id && state.externalEvents) {
+      return [...internalTasks, ...state.externalEvents];
+    }
+    
+    return internalTasks;
+  }, [state.tasks, state.externalEvents, targetUserId, state.currentUser?.id]);
 
   const userProposals = useMemo(() => {
     return state.rdvProposals.filter(p => p.commercialId === targetUserId || p.prospectorId === targetUserId);

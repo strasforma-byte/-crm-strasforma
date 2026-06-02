@@ -2,6 +2,7 @@ import React, { createContext, useContext, useReducer, useEffect, useState } fro
 import { supabase } from "@/lib/supabase";
 import { db } from "@/lib/db";
 import { toast } from "sonner";
+import ical from "node-ical";
 
 const AppContext = createContext();
 
@@ -13,6 +14,7 @@ const initialState = {
   contacts: [],
   contactLists: [],
   tasks: [],
+  externalEvents: [],
   rdvProposals: [],
   notifications: [],
 };
@@ -35,6 +37,8 @@ function appReducer(state, action) {
       return { ...state, contactLists: action.payload };
     case "UPDATE_TASKS":
       return { ...state, tasks: action.payload };
+    case "UPDATE_EXTERNAL_EVENTS":
+      return { ...state, externalEvents: action.payload };
     case "UPDATE_PROPOSALS":
       return { ...state, rdvProposals: action.payload };
     case "UPDATE_NOTIFICATIONS":
@@ -49,6 +53,39 @@ function appReducer(state, action) {
 export function AppProvider({ children }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
 
+  const fetchExternalCalendar = async (url) => {
+    if (!url) {
+      dispatch({ type: "UPDATE_EXTERNAL_EVENTS", payload: [] });
+      return;
+    }
+
+    try {
+      // Proxying via a CORS service might be needed if Google Calendar blocks direct browser access
+      // For now, let's try direct fetch
+      const response = await fetch(url);
+      const data = await response.text();
+      const events = ical.parseICS(data);
+      
+      const mappedEvents = Object.values(events)
+        .filter(event => event.type === 'VEVENT')
+        .map(event => ({
+          id: event.uid,
+          title: event.summary,
+          description: event.description,
+          dueDate: event.start.toISOString(),
+          date: event.start.toISOString().split('T')[0],
+          time: event.start.toISOString().split('T')[1].substring(0, 5),
+          type: 'google',
+          status: 'external'
+        }));
+        
+      dispatch({ type: "UPDATE_EXTERNAL_EVENTS", payload: mappedEvents });
+    } catch (error) {
+      console.warn("Could not fetch external calendar:", error);
+      // Fallback: Silent error to not disturb the user if the URL is wrong or CORS blocked
+    }
+  };
+
   const refreshAllData = async () => {
     try {
       const currentUserId = state.currentUser?.id;
@@ -61,6 +98,10 @@ export function AppProvider({ children }) {
         db.getProposals(),
         currentUserId ? db.getNotifications(currentUserId) : Promise.resolve([])
       ]);
+
+      if (state.currentUser?.settings?.calendarUrl) {
+        fetchExternalCalendar(state.currentUser.settings.calendarUrl);
+      }
 
       dispatch({
         type: "INIT_DATA",
@@ -96,6 +137,11 @@ export function AppProvider({ children }) {
           
           if (profile) {
             dispatch({ type: "SET_CURRENT_USER", payload: profile });
+            
+            if (profile.settings?.calendarUrl) {
+              fetchExternalCalendar(profile.settings.calendarUrl);
+            }
+
             if (profile.isApproved) {
               const [pipelines, contacts, contactLists, tasks, rdvProposals, notifications] = await Promise.all([
                 db.getPipelines(),
@@ -141,6 +187,11 @@ export function AppProvider({ children }) {
           
           if (profile) {
             dispatch({ type: "SET_CURRENT_USER", payload: profile });
+            
+            if (profile.settings?.calendarUrl) {
+              fetchExternalCalendar(profile.settings.calendarUrl);
+            }
+
             if (profile.isApproved) {
               await refreshAllData();
             } else {

@@ -20,7 +20,8 @@ import {
   Fingerprint,
   User as UserIcon,
   Briefcase,
-  Loader2
+  Loader2,
+  ExternalLink
 } from "lucide-react";
 import { 
   Command, 
@@ -323,6 +324,21 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
     }
   };
 
+  const getGoogleCalendarUrl = () => {
+    const start = new Date(formData.date);
+    const [h, m] = formData.time.split(':').map(Number);
+    start.setHours(h, m);
+    const end = new Date(start.getTime() + (parseInt(formData.duration) || 30) * 60000);
+    
+    const formatDate = (date) => date.toISOString().replace(/-|:|\.\d+/g, "");
+    
+    const title = encodeURIComponent(formData.title);
+    const details = encodeURIComponent(formData.notes || "");
+    const dates = `${formatDate(start)}/${formatDate(end)}`;
+    
+    return `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${dates}`;
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
@@ -526,6 +542,17 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
               onChange={e => setFormData({...formData, notes: e.target.value})} 
             />
           </div>
+
+          <div className="col-span-2 border-t pt-4 mt-2">
+            <Button 
+              variant="outline" 
+              className="w-full h-9 text-xs border-slate-200 hover:bg-slate-50 font-bold"
+              onClick={() => window.open(getGoogleCalendarUrl(), '_blank')}
+            >
+              <ExternalLink className="w-3.5 h-3.5 mr-2 text-blue-500" />
+              Ajouter à Google Calendar
+            </Button>
+          </div>
         </div>
 
         <DialogFooter className="gap-2 sm:justify-between">
@@ -548,6 +575,7 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
           </div>
         </DialogFooter>
       </DialogContent>
+
 
       <Dialog open={isQuickContactOpen} onOpenChange={setIsQuickContactOpen}>
         <DialogContent className="sm:max-w-[400px]">
