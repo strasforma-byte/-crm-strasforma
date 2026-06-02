@@ -2,7 +2,7 @@ import React, { createContext, useContext, useReducer, useEffect, useState } fro
 import { supabase } from "@/lib/supabase";
 import { db } from "@/lib/db";
 import { toast } from "sonner";
-import ICAL from "ical.js";
+import * as ICAL from "ical.js";
 
 const AppContext = createContext();
 
@@ -83,6 +83,11 @@ export function AppProvider({ children }) {
         throw new Error("Format iCal invalide");
       }
       
+      if (!ICAL || typeof ICAL.parse !== 'function') {
+        console.error("ICAL library not properly loaded");
+        throw new Error("Erreur système (Calendrier)");
+      }
+
       const jcalData = ICAL.parse(data);
       const comp = new ICAL.Component(jcalData);
       const vevents = comp.getAllSubcomponents('vevent');
@@ -128,9 +133,11 @@ export function AppProvider({ children }) {
         currentUserId ? db.getNotifications(currentUserId) : Promise.resolve([])
       ]);
 
+      /*
       if (state.currentUser?.settings?.calendarUrl) {
         fetchExternalCalendar(state.currentUser.settings.calendarUrl);
       }
+      */
 
       dispatch({
         type: "INIT_DATA",
@@ -167,9 +174,7 @@ export function AppProvider({ children }) {
           if (profile) {
             dispatch({ type: "SET_CURRENT_USER", payload: profile });
             
-            if (profile.settings?.calendarUrl) {
-              fetchExternalCalendar(profile.settings.calendarUrl);
-            }
+            // fetchExternalCalendar(profile.settings?.calendarUrl);
 
             if (profile.isApproved) {
               const [pipelines, contacts, contactLists, tasks, rdvProposals, notifications] = await Promise.all([
@@ -217,9 +222,7 @@ export function AppProvider({ children }) {
           if (profile) {
             dispatch({ type: "SET_CURRENT_USER", payload: profile });
             
-            if (profile.settings?.calendarUrl) {
-              fetchExternalCalendar(profile.settings.calendarUrl);
-            }
+            // fetchExternalCalendar(profile.settings?.calendarUrl);
 
             if (profile.isApproved) {
               await refreshAllData();

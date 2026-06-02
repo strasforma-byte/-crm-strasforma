@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useApp } from "@/context/AppContext";
 import { usePermissions } from "@/hooks/usePermissions";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -27,8 +27,7 @@ export default function AgendaView() {
   const [isProposalSheetOpen, setIsProposalSheetOpen] = useState(false);
   const [selectedProposal, setSelectedProposal] = useState(null);
 
-  // Synchronize targetUserId when currentUser changes (e.g. after login)
-  React.useEffect(() => {
+  useEffect(() => {
     if (state.currentUser?.id && !targetUserId) {
       setTargetUserId(state.currentUser.id);
     }
@@ -47,24 +46,31 @@ export default function AgendaView() {
   const handleToday = () => setBaseDate(new Date());
 
   const getPeriodLabel = () => {
-    if (view === "month") return format(baseDate, "MMMM yyyy", { locale: fr });
-    if (view === "week") {
-      const start = startOfWeek(baseDate, { weekStartsOn: 1 });
-      const end = endOfWeek(baseDate, { weekStartsOn: 1 });
-      if (start.getMonth() === end.getMonth()) {
-        return `Semaine du ${format(start, "d")} au ${format(end, "d MMMM yyyy", { locale: fr })}`;
+    try {
+      if (view === "month") return format(baseDate, "MMMM yyyy", { locale: fr });
+      if (view === "week") {
+        const start = startOfWeek(baseDate, { weekStartsOn: 1 });
+        const end = endOfWeek(baseDate, { weekStartsOn: 1 });
+        if (start.getMonth() === end.getMonth()) {
+          return `Semaine du ${format(start, "d")} au ${format(end, "d MMMM yyyy", { locale: fr })}`;
+        }
+        return `Semaine du ${format(start, "d MMMM")} au ${format(end, "d MMMM yyyy", { locale: fr })}`;
       }
-      return `Semaine du ${format(start, "d MMMM")} au ${format(end, "d MMMM yyyy", { locale: fr })}`;
+    } catch (e) {
+      return "Agenda";
     }
     return "Prochaines actions";
   };
 
-  const targetUser = state.users.find(u => u.id === targetUserId);
+  const targetUser = useMemo(() => 
+    (state.users || []).find(u => u.id === targetUserId),
+    [state.users, targetUserId]
+  );
   
   const userTasks = useMemo(() => {
-    const internalTasks = state.tasks.filter(t => t.userId === targetUserId);
+    const tasks = Array.isArray(state.tasks) ? state.tasks : [];
+    const internalTasks = tasks.filter(t => t.userId === targetUserId);
     
-    // If viewing own agenda, add external events
     if (targetUserId === state.currentUser?.id && Array.isArray(state.externalEvents)) {
       return [...internalTasks, ...state.externalEvents];
     }
@@ -72,9 +78,15 @@ export default function AgendaView() {
     return internalTasks;
   }, [state.tasks, state.externalEvents, targetUserId, state.currentUser?.id]);
 
+  const userProposals = useMemo(() => {
+    const proposals = Array.isArray(state.rdvProposals) ? state.rdvProposals : [];
+    return proposals.filter(p => p.commercialId === targetUserId || p.prospectorId === targetUserId);
+  }, [state.rdvProposals, targetUserId]);
+
   const hasGoogleSync = !!state.currentUser?.settings?.calendarUrl;
 
   const handleOpenTask = (task) => {
+    if (!task) return;
     if (task.type === 'google') {
       toast.info("Événement Google Calendar", {
         description: "Cet événement est en lecture seule depuis votre Google Agenda."
@@ -86,19 +98,22 @@ export default function AgendaView() {
   };
 
   const handleOpenProposal = (proposal) => {
+    if (!proposal) return;
     setSelectedProposal(proposal);
     setIsProposalSheetOpen(true);
   };
 
+  if (!state.currentUser) return null;
+
   return (
-    <div className="space-y-6 h-full flex flex-col">
+    <div className="space-y-6 h-full flex flex-col p-4">
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div className="flex flex-wrap items-center gap-4">
           <h2 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
             Agenda
             <div className="flex gap-2">
               <Badge variant="outline" className="text-[10px] font-black text-slate-400 border-slate-200 uppercase tracking-widest px-2 py-0.5">
-                {userTasks.length} ACTIONS
+                {(userTasks || []).length} ACTIONS
               </Badge>
               {hasGoogleSync && targetUserId === state.currentUser?.id && (
                 <Badge className="text-[10px] font-black bg-blue-50 text-blue-600 border-blue-100 uppercase tracking-widest px-2 py-0.5 flex items-center gap-1">
@@ -114,7 +129,7 @@ export default function AgendaView() {
               variant="ghost" 
               size="sm" 
               className="h-8 px-2 text-[9px] font-bold text-blue-600 hover:bg-blue-50"
-              onClick={() => refreshAllData()}
+              onClick={() => refreshAllData && refreshAllData()}
             >
               <RefreshCw className="w-3 h-3 mr-1" />
               SYNCHRO
@@ -137,7 +152,7 @@ export default function AgendaView() {
             {getPeriodLabel()}
           </span>
           
-          {(isAdmin || isProspecteur) && (
+          {(isAdmin || isProspecteur) && state.currentUser && (
             <Select value={targetUserId} onValueChange={setTargetUserId}>
               <SelectTrigger className="w-[200px] h-10 bg-white border-slate-200 font-bold text-xs">
                 <div className="flex items-center gap-2">
@@ -147,7 +162,7 @@ export default function AgendaView() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={state.currentUser.id} className="font-bold">Mon agenda</SelectItem>
-                {state.users.filter(u => u.id !== state.currentUser.id && canViewUserAgenda(u)).map(u => (
+                {(state.users || []).filter(u => u.id !== state.currentUser.id && canViewUserAgenda(u)).map(u => (
                   <SelectItem key={u.id} value={u.id} className="font-medium">Agenda de {u.name}</SelectItem>
                 ))}
               </SelectContent>
