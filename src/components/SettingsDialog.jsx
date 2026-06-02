@@ -21,22 +21,39 @@ export default function SettingsDialog({ open, onOpenChange }) {
   const [color, setColor] = useState(user?.color || COLORS[0]);
   const [shareAgenda, setShareAgenda] = useState(user?.settings?.shareAgendaWithProspectors || false);
   const [calendarUrl, setCalendarUrl] = useState(user?.settings?.calendarUrl || "");
+  const [isSaving, setIsSaving] = useState(false);
+
+  React.useEffect(() => {
+    if (open && user) {
+      setName(user.name || "");
+      setColor(user.color || COLORS[0]);
+      setShareAgenda(user.settings?.shareAgendaWithProspectors || false);
+      setCalendarUrl(user.settings?.calendarUrl || "");
+    }
+  }, [open, user]);
 
   if (!user) return null;
 
   const handleSave = async () => {
+    if (isSaving) return;
+    setIsSaving(true);
+    console.log("Saving settings for user:", user.id);
+    
     try {
+      const currentSettings = user.settings || {};
       const updatedProfile = {
         name,
         color,
         settings: { 
-          ...user.settings, 
+          ...currentSettings, 
           shareAgendaWithProspectors: shareAgenda,
           calendarUrl: calendarUrl
         }
       };
 
-      await db.updateUserProfile(user.id, updatedProfile);
+      console.log("Payload:", updatedProfile);
+      const result = await db.updateUserProfile(user.id, updatedProfile);
+      console.log("Update result:", result);
       
       const updatedUser = {
         ...user,
@@ -47,11 +64,13 @@ export default function SettingsDialog({ open, onOpenChange }) {
       dispatch({ type: "UPDATE_USERS", payload: updatedUsers });
       dispatch({ type: "SET_CURRENT_USER", payload: updatedUser });
       
-      onOpenChange(false);
       toast.success("Paramètres enregistrés");
+      onOpenChange(false);
     } catch (error) {
       console.error("Error updating settings:", error);
-      toast.error("Erreur lors de l'enregistrement des paramètres");
+      toast.error("Erreur lors de l'enregistrement des paramètres : " + (error.message || "Erreur inconnue"));
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -170,8 +189,12 @@ export default function SettingsDialog({ open, onOpenChange }) {
           </div>
         </div>
         <DialogFooter>
-          <Button onClick={handleSave} className="bg-green-600 hover:bg-green-700 w-full">
-            Enregistrer les modifications
+          <Button 
+            onClick={handleSave} 
+            className="bg-green-600 hover:bg-green-700 w-full"
+            disabled={isSaving}
+          >
+            {isSaving ? "Enregistrement..." : "Enregistrer les modifications"}
           </Button>
         </DialogFooter>
       </DialogContent>
