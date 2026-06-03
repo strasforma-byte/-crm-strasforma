@@ -486,7 +486,7 @@ export const db = {
   // Helper pour mapper une seule tâche (utilisé après insert)
   _mapSingleTask(t) {
     let linkedCardId = t.linked_card_id;
-    let type = "call"; 
+    let type = t.type || "call"; 
     let cleanDescription = t.description || "";
     
     // Tentative d'extraction du nouveau format JSON [meta:{...}]
@@ -519,6 +519,7 @@ export const db = {
       title: t.title,
       description: cleanDescription,
       dueDate: t.due_date,
+      endDate: t.end_date,
       date: t.due_date ? t.due_date.split('T')[0] : null,
       time: t.due_date ? (() => {
         const d = new Date(t.due_date);
