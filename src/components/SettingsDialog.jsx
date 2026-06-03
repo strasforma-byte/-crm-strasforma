@@ -90,6 +90,48 @@ export default function SettingsDialog({ open, onOpenChange }) {
     window.location.reload();
   };
 
+  const handleCleanAgenda = async () => {
+    if (!confirm("Voulez-vous supprimer tous les événements Google de votre agenda Strasforma ? (Ils seront réimportés proprement par Make lors de la prochaine synchro)")) return;
+    
+    try {
+      setIsSaving(true);
+      await db.deleteExternalTasks(user.id);
+      
+      // Clear local cache for external events too
+      localStorage.removeItem(`paff_external_cal_${user.id}`);
+      dispatch({ type: "UPDATE_EXTERNAL_EVENTS", payload: [] });
+      
+      const updatedTasks = state.tasks.filter(t => t.status !== 'external' || t.userId !== user.id);
+      dispatch({ type: "UPDATE_TASKS", payload: updatedTasks });
+      
+      toast.success("Agenda nettoyé !");
+    } catch (error) {
+      console.error("Error cleaning agenda:", error);
+      toast.error("Erreur lors du nettoyage");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteAllTasks = async () => {
+    if (!confirm("ATTENTION : Cela va supprimer DÉFINITIVEMENT toutes vos tâches (appels, RDV, etc.). Continuer ?")) return;
+    
+    try {
+      setIsSaving(true);
+      await db.deleteAllUserTasks(user.id);
+      
+      const updatedTasks = state.tasks.filter(t => t.userId !== user.id);
+      dispatch({ type: "UPDATE_TASKS", payload: updatedTasks });
+      
+      toast.success("Toutes les tâches ont été supprimées");
+    } catch (error) {
+      console.error("Error deleting all tasks:", error);
+      toast.error("Erreur lors de la suppression");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const copyId = () => {
     navigator.clipboard.writeText(user.id);
     toast.success("ID copié !");
@@ -168,6 +210,16 @@ export default function SettingsDialog({ open, onOpenChange }) {
                   </p>
                 </div>
               </div>
+
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleCleanAgenda} 
+                className="text-[10px] font-bold text-red-600 border-red-100 hover:bg-red-50 hover:text-red-700 h-8"
+              >
+                <Trash2 className="w-3 h-3 mr-2" />
+                Nettoyer les RDV synchronisés
+              </Button>
             </div>
           </div>
 
@@ -202,6 +254,16 @@ export default function SettingsDialog({ open, onOpenChange }) {
               <Button variant="outline" size="sm" onClick={handleExport} className="text-xs font-bold border-green-100 hover:bg-green-50 text-green-700 h-10">
                 <Download className="w-4 h-4 mr-2" />
                 Télécharger une Sauvegarde Complète (JSON)
+              </Button>
+
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                onClick={handleDeleteAllTasks} 
+                className="text-[10px] text-red-400 hover:text-red-600 font-bold h-8"
+              >
+                <Trash2 className="w-3 h-3 mr-2" />
+                Vider tout mon agenda (DÉFINITIF)
               </Button>
               
               {isAdmin && (

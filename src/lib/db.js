@@ -487,6 +487,16 @@ export const db = {
     if (error) throw error
   },
 
+  async deleteExternalTasks(userId) {
+    const { error } = await supabase.from('tasks').delete().eq('assigned_to', userId).eq('status', 'external')
+    if (error) throw error
+  },
+
+  async deleteAllUserTasks(userId) {
+    const { error } = await supabase.from('tasks').delete().eq('assigned_to', userId)
+    if (error) throw error
+  },
+
   // Helper pour mapper une seule tâche (utilisé après insert)
   _mapSingleTask(t) {
     let linkedCardId = t.linked_card_id;
