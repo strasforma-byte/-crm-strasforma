@@ -95,12 +95,6 @@ export default function AgendaView() {
 
   const handleOpenTask = (task) => {
     if (!task) return;
-    if (task.type === 'google') {
-      toast.info("Événement Google Calendar", {
-        description: "Cet événement est en lecture seule depuis votre Google Agenda."
-      });
-      return;
-    }
     setSelectedTask(task);
     setIsTaskDialogOpen(true);
   };

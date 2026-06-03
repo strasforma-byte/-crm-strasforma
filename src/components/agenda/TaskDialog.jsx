@@ -344,12 +344,25 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
     return `https://www.google.com/calendar/render?action=TEMPLATE&text=${title}&details=${details}&dates=${dates}`;
   };
 
+  const isGoogleTask = task?.type === 'google' || task?.status === 'external';
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>{task ? "Modifier la tâche" : "Nouvelle tâche"}</DialogTitle>
+          <DialogTitle>
+            {isGoogleTask ? "Détails de l'événement Google" : task ? "Modifier la tâche" : "Nouvelle tâche"}
+          </DialogTitle>
         </DialogHeader>
+
+        {isGoogleTask && (
+          <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg mb-2">
+            <p className="text-[10px] text-blue-700 font-medium flex items-center gap-2">
+              <ExternalLink className="w-3 h-3" />
+              Cet événement provient de votre Google Agenda. Il est en lecture seule ici.
+            </p>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 gap-x-4 gap-y-4 py-4">
           <div className="col-span-2 space-y-1.5">
@@ -359,12 +372,17 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
               className="h-9 text-xs border-slate-200 bg-slate-50/50"
               onChange={e => setFormData({...formData, title: e.target.value})} 
               placeholder="Ex: Rappeler client" 
+              disabled={isGoogleTask}
             />
           </div>
 
           <div className="space-y-1.5">
             <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Type</Label>
-            <Select value={formData.type} onValueChange={val => setFormData({...formData, type: val})}>
+            <Select 
+              value={formData.type} 
+              onValueChange={val => setFormData({...formData, type: val})}
+              disabled={isGoogleTask}
+            >
               <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
                 <SelectValue />
               </SelectTrigger>
@@ -373,6 +391,7 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
                 <SelectItem value="email" className="text-xs">📧 Email</SelectItem>
                 <SelectItem value="meeting" className="text-xs">🤝 RDV</SelectItem>
                 <SelectItem value="relance" className="text-xs">🔔 Relance</SelectItem>
+                <SelectItem value="google" className="text-xs">🗓️ Google</SelectItem>
                 <SelectItem value="other" className="text-xs">📌 Autre</SelectItem>
               </SelectContent>
             </Select>
@@ -380,7 +399,11 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
 
           <div className="space-y-1.5">
             <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Durée (min)</Label>
-            <Select value={formData.duration} onValueChange={val => setFormData({...formData, duration: val})}>
+            <Select 
+              value={formData.duration} 
+              onValueChange={val => setFormData({...formData, duration: val})}
+              disabled={isGoogleTask}
+            >
               <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
                 <SelectValue />
               </SelectTrigger>
@@ -398,20 +421,26 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
             <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Date</Label>
             <Popover>
               <PopoverTrigger asChild>
-                <Button variant="outline" className="w-full h-9 justify-start text-left font-medium text-xs border-slate-200 bg-slate-50/50">
+                <Button 
+                  variant="outline" 
+                  className="w-full h-9 justify-start text-left font-medium text-xs border-slate-200 bg-slate-50/50"
+                  disabled={isGoogleTask}
+                >
                   <CalendarIcon className="mr-2 h-3.5 w-3.5 text-slate-400" />
                   {format(formData.date, "dd/MM/yyyy")}
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={formData.date}
-                  onSelect={date => setFormData({...formData, date: date || new Date()})}
-                  initialFocus
-                  locale={fr}
-                />
-              </PopoverContent>
+              {!isGoogleTask && (
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={formData.date}
+                    onSelect={date => setFormData({...formData, date: date || new Date()})}
+                    initialFocus
+                    locale={fr}
+                  />
+                </PopoverContent>
+              )}
             </Popover>
           </div>
 
@@ -422,15 +451,18 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
               className="h-9 text-xs border-slate-200 bg-slate-50/50"
               value={formData.time} 
               onChange={e => setFormData({...formData, time: e.target.value})} 
+              disabled={isGoogleTask}
             />
           </div>
 
           <div className="col-span-2 space-y-1.5">
             <Label className="flex justify-between items-center text-[11px] uppercase font-black tracking-wider text-slate-500">
               <span>Contact lié</span>
-              <Button variant="ghost" className="h-4 px-1 text-[9px] text-green-600 hover:bg-green-50 font-black" onClick={() => setIsQuickContactOpen(true)}>
-                + NOUVEAU
-              </Button>
+              {!isGoogleTask && (
+                <Button variant="ghost" className="h-4 px-1 text-[9px] text-green-600 hover:bg-green-50 font-black" onClick={() => setIsQuickContactOpen(true)}>
+                  + NOUVEAU
+                </Button>
+              )}
             </Label>
             <Popover open={isClientSearchOpen} onOpenChange={setIsClientSearchOpen}>
               <PopoverTrigger asChild>
@@ -439,6 +471,7 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
                   role="combobox"
                   aria-expanded={isClientSearchOpen}
                   className="w-full h-9 justify-between font-medium border-slate-200 bg-slate-50/50"
+                  disabled={isGoogleTask}
                 >
                   <div className="flex items-center gap-2 overflow-hidden">
                     <Building2 className="w-3.5 h-3.5 text-slate-400 shrink-0" />
@@ -451,63 +484,69 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
                   <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-30" />
                 </Button>
               </PopoverTrigger>
-              <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 shadow-xl border-slate-100" align="start">
-                <Command 
-                  className="rounded-lg"
-                  filter={(value, search) => {
-                    if (value.toLowerCase().includes(search.toLowerCase())) return 1;
-                    return 0;
-                  }}
-                >
-                  <CommandInput placeholder="Nom ou Société..." className="h-9 text-xs" />
-                  <CommandList className="max-h-[200px]">
-                    <CommandEmpty className="py-2 text-[10px] text-slate-400 text-center">Aucun résultat</CommandEmpty>
-                    <CommandGroup>
-                      <CommandItem
-                        value="aucun"
-                        className="py-1 px-2 cursor-pointer text-xs italic text-slate-400"
-                        onSelect={() => {
-                          setFormData({ ...formData, linkedContactId: "none" });
-                          setIsClientSearchOpen(false);
-                        }}
-                      >
-                        Aucun
-                      </CommandItem>
-                      {state.contacts.map((c) => {
-                        const searchValue = `${c.firstName} ${c.lastName} ${c.company}`.toLowerCase();
-                        return (
-                          <CommandItem
-                            key={c.id}
-                            value={searchValue}
-                            className="py-1 px-2 cursor-pointer"
-                            onSelect={() => {
-                              setFormData({ ...formData, linkedContactId: c.id });
-                              setIsClientSearchOpen(false);
-                            }}
-                          >
-                            <Check
-                              className={cn(
-                                "mr-2 h-3 w-3 text-green-600",
-                                formData.linkedContactId === c.id ? "opacity-100" : "opacity-0"
-                              )}
-                            />
-                            <div className="flex flex-col min-w-0">
-                              <span className="font-bold text-[11px] truncate">{c.firstName} {c.lastName}</span>
-                              <span className="text-[9px] text-slate-400 uppercase truncate font-medium">{c.company}</span>
-                            </div>
-                          </CommandItem>
-                        );
-                      })}
-                    </CommandGroup>
-                  </CommandList>
-                </Command>
-              </PopoverContent>
+              {!isGoogleTask && (
+                <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0 shadow-xl border-slate-100" align="start">
+                  <Command 
+                    className="rounded-lg"
+                    filter={(value, search) => {
+                      if (value.toLowerCase().includes(search.toLowerCase())) return 1;
+                      return 0;
+                    }}
+                  >
+                    <CommandInput placeholder="Nom ou Société..." className="h-9 text-xs" />
+                    <CommandList className="max-h-[200px]">
+                      <CommandEmpty className="py-2 text-[10px] text-slate-400 text-center">Aucun résultat</CommandEmpty>
+                      <CommandGroup>
+                        <CommandItem
+                          value="aucun"
+                          className="py-1 px-2 cursor-pointer text-xs italic text-slate-400"
+                          onSelect={() => {
+                            setFormData({ ...formData, linkedContactId: "none" });
+                            setIsClientSearchOpen(false);
+                          }}
+                        >
+                          Aucun
+                        </CommandItem>
+                        {state.contacts.map((c) => {
+                          const searchValue = `${c.firstName} ${c.lastName} ${c.company}`.toLowerCase();
+                          return (
+                            <CommandItem
+                              key={c.id}
+                              value={searchValue}
+                              className="py-1 px-2 cursor-pointer"
+                              onSelect={() => {
+                                setFormData({ ...formData, linkedContactId: c.id });
+                                setIsClientSearchOpen(false);
+                              }}
+                            >
+                              <Check
+                                className={cn(
+                                  "mr-2 h-3 w-3 text-green-600",
+                                  formData.linkedContactId === c.id ? "opacity-100" : "opacity-0"
+                                )}
+                              />
+                              <div className="flex flex-col min-w-0">
+                                <span className="font-bold text-[11px] truncate">{c.firstName} {c.lastName}</span>
+                                <span className="text-[9px] text-slate-400 uppercase truncate font-medium">{c.company}</span>
+                              </div>
+                            </CommandItem>
+                          );
+                        })}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              )}
             </Popover>
           </div>
 
           <div className="col-span-2 space-y-1.5">
             <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Affaire liée</Label>
-            <Select value={formData.linkedCardId} onValueChange={val => setFormData({...formData, linkedCardId: val})}>
+            <Select 
+              value={formData.linkedCardId} 
+              onValueChange={val => setFormData({...formData, linkedCardId: val})}
+              disabled={isGoogleTask}
+            >
               <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
                 <SelectValue />
               </SelectTrigger>
@@ -520,10 +559,14 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
             </Select>
           </div>
 
-          {isAdmin && (
+          {(isAdmin || isGoogleTask) && (
             <div className="col-span-2 space-y-1.5">
               <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Assigné à</Label>
-              <Select value={formData.userId} onValueChange={val => setFormData({...formData, userId: val})}>
+              <Select 
+                value={formData.userId} 
+                onValueChange={val => setFormData({...formData, userId: val})}
+                disabled={isGoogleTask}
+              >
                 <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
                   <div className="flex items-center gap-2">
                     <UserIcon className="w-3.5 h-3.5 text-slate-400" />
@@ -545,29 +588,32 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
               className="min-h-[80px] text-xs border-slate-200 bg-slate-50/50" 
               value={formData.notes} 
               onChange={e => setFormData({...formData, notes: e.target.value})} 
+              disabled={isGoogleTask}
             />
           </div>
 
-          <div className="col-span-2 border-t pt-4 mt-2">
-            <Button 
-              variant="outline" 
-              className="w-full h-9 text-xs border-slate-200 hover:bg-slate-50 font-bold"
-              onClick={() => window.open(getGoogleCalendarUrl(), '_blank')}
-            >
-              <ExternalLink className="w-3.5 h-3.5 mr-2 text-blue-500" />
-              Ajouter à Google Calendar
-            </Button>
-          </div>
+          {!isGoogleTask && (
+            <div className="col-span-2 border-t pt-4 mt-2">
+              <Button 
+                variant="outline" 
+                className="w-full h-9 text-xs border-slate-200 hover:bg-slate-50 font-bold"
+                onClick={() => window.open(getGoogleCalendarUrl(), '_blank')}
+              >
+                <ExternalLink className="w-3.5 h-3.5 mr-2 text-blue-500" />
+                Ajouter à Google Calendar
+              </Button>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="gap-2 sm:justify-between">
           <div className="flex gap-2">
-            {task && (
+            {!isGoogleTask && task && (
               <Button variant="outline" size="icon" className="h-9 w-9 text-red-600 border-red-100 hover:bg-red-50" onClick={handleDelete}>
                 <Trash2 className="w-4 h-4" />
               </Button>
             )}
-            {task && (
+            {!isGoogleTask && task && (
               <Button variant="outline" className={cn("h-9 text-xs", formData.status === 'done' ? 'text-blue-600 border-blue-100 hover:bg-blue-50' : 'text-green-600 border-green-100 hover:bg-green-50')} onClick={handleToggleStatus}>
                 <Check className="w-4 h-4 mr-2" />
                 {formData.status === 'done' ? "Réouvrir" : "Terminer"}
@@ -575,8 +621,12 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
             )}
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" className="h-9 text-xs" onClick={() => onOpenChange(false)}>Annuler</Button>
-            <Button className="h-9 text-xs bg-green-600 hover:bg-green-700" onClick={handleSave}>Enregistrer</Button>
+            <Button variant="outline" className="h-9 text-xs" onClick={() => onOpenChange(false)}>
+              {isGoogleTask ? "Fermer" : "Annuler"}
+            </Button>
+            {!isGoogleTask && (
+              <Button className="h-9 text-xs bg-green-600 hover:bg-green-700" onClick={handleSave}>Enregistrer</Button>
+            )}
           </div>
         </DialogFooter>
       </DialogContent>
