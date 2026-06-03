@@ -71,11 +71,19 @@ export default function AgendaView() {
     const tasks = Array.isArray(state.tasks) ? state.tasks : [];
     const internalTasks = tasks.filter(t => t.userId === targetUserId);
     
+    let allTasks = internalTasks;
     if (targetUserId === state.currentUser?.id && Array.isArray(state.externalEvents)) {
-      return [...internalTasks, ...state.externalEvents];
+      allTasks = [...internalTasks, ...state.externalEvents];
     }
     
-    return internalTasks;
+    // Filtrage des doublons (titre + date + heure + utilisateur)
+    const seen = new Set();
+    return allTasks.filter(t => {
+      const key = `${t.title}-${t.date}-${t.time}-${t.userId}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   }, [state.tasks, state.externalEvents, targetUserId, state.currentUser?.id]);
 
   const userProposals = useMemo(() => {
