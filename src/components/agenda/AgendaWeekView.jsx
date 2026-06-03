@@ -78,7 +78,16 @@ export default function AgendaWeekView({ baseDate, tasks, proposals, targetUser,
 
                 {/* Tasks */}
                 {tasks.filter(t => isSameDay(new Date(t.date), day)).map(task => {
-                  const pos = calculatePosition(task.time, task.duration || 30);
+                  let duration = task.duration || 30;
+                  
+                  // If task has a due_date and it's a Google event, calculate duration from start/end
+                  if (task.type === 'google' && task.dueDate && task.endDate) {
+                    const start = new Date(task.dueDate);
+                    const end = new Date(task.endDate);
+                    duration = Math.max(30, (end - start) / (1000 * 60));
+                  }
+                  
+                  const pos = calculatePosition(task.time, duration);
                   return (
                     <div 
                       key={task.id}
@@ -90,7 +99,7 @@ export default function AgendaWeekView({ baseDate, tasks, proposals, targetUser,
                         {task.linkedCardId && <Briefcase className="w-2 h-2 shrink-0" />}
                         {task.title}
                       </p>
-                      <p className="text-[8px] opacity-80">{task.time} • {task.duration}m</p>
+                      <p className="text-[8px] opacity-80">{task.time} • {Math.round(duration)}m</p>
                     </div>
                   );
                 })}

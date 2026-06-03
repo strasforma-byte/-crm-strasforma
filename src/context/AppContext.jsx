@@ -136,12 +136,14 @@ export function AppProvider({ children }) {
           if (!event.startDate) return null;
           
           const startDate = event.startDate.toJSDate();
+          const endDate = event.endDate ? event.endDate.toJSDate() : new Date(startDate.getTime() + 30 * 60000);
           
           return {
             id: event.uid || Math.random().toString(36).substr(2, 9),
             title: "🗓️ " + (event.summary || "Occupation Google"),
             description: event.description || "",
             dueDate: startDate.toISOString(),
+            endDate: endDate.toISOString(),
             date: startDate.toISOString().split('T')[0],
             time: `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`,
             type: 'google',
