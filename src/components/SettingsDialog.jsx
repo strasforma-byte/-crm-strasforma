@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
-import { Download, Trash2, RefreshCw, Shield } from "lucide-react";
+import { Download, Trash2, RefreshCw, Shield, Copy } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
@@ -88,6 +88,11 @@ export default function SettingsDialog({ open, onOpenChange }) {
   const handleReset = () => {
     window.localStorage.removeItem("crm_data");
     window.location.reload();
+  };
+
+  const copyId = () => {
+    navigator.clipboard.writeText(user.id);
+    toast.success("ID copié !");
   };
 
   return (
@@ -178,6 +183,19 @@ export default function SettingsDialog({ open, onOpenChange }) {
                 Vos données sont stockées en temps réel sur Supabase (serveurs sécurisés). 
                 Nous vous conseillons de télécharger une sauvegarde manuelle régulièrement.
               </p>
+            </div>
+
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-100 space-y-2">
+              <Label className="text-[10px] uppercase font-black text-slate-400">ID de synchronisation (Make/Zapier)</Label>
+              <div className="flex gap-2">
+                <code className="flex-1 bg-white border border-slate-200 rounded px-2 py-1 text-[10px] font-mono truncate flex items-center">
+                  {user.id}
+                </code>
+                <Button variant="outline" size="icon" className="h-7 w-7" onClick={copyId}>
+                  <Copy className="w-3 h-3" />
+                </Button>
+              </div>
+              <p className="text-[9px] text-slate-400 italic">À copier dans le champ "assigned_to" de Make.</p>
             </div>
             
             <div className="grid grid-cols-1 gap-2">
