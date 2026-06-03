@@ -39,6 +39,39 @@ function appReducer(state, action) {
       return { ...state, tasks: action.payload };
     case "UPDATE_EXTERNAL_EVENTS":
       return { ...state, externalEvents: action.payload };
+    case "IMPORT_ICAL_DATA":
+      try {
+        const jcalData = ICAL.parse(action.payload);
+        const comp = new ICAL.Component(jcalData);
+        const vevents = comp.getAllSubcomponents('vevent');
+        
+        const mappedEvents = vevents.map(veventComp => {
+          try {
+            const event = new ICAL.Event(veventComp);
+            if (!event.startDate) return null;
+            const startDate = event.startDate.toJSDate();
+            
+            return {
+              id: event.uid || Math.random().toString(36).substr(2, 9),
+              title: "🗓️ " + (event.summary || "Occupation Google"),
+              description: event.description || "",
+              dueDate: startDate.toISOString(),
+              date: startDate.toISOString().split('T')[0],
+              time: `${String(startDate.getHours()).padStart(2, '0')}:${String(startDate.getMinutes()).padStart(2, '0')}`,
+              type: 'google',
+              userId: state.currentUser?.id,
+              status: 'external'
+            };
+          } catch (e) { return null; }
+        }).filter(Boolean);
+
+        // Save to local storage for persistence
+        localStorage.setItem(`paff_external_cal_${state.currentUser?.id}`, JSON.stringify(mappedEvents));
+        return { ...state, externalEvents: mappedEvents };
+      } catch (error) {
+        console.error("Import error:", error);
+        return state;
+      }
     case "UPDATE_PROPOSALS":
       return { ...state, rdvProposals: action.payload };
     case "UPDATE_NOTIFICATIONS":
@@ -183,7 +216,12 @@ export function AppProvider({ children }) {
           if (profile) {
             dispatch({ type: "SET_CURRENT_USER", payload: profile });
             
-            // fetchExternalCalendar(profile.settings?.calendarUrl);
+            const savedEvents = localStorage.getItem(`paff_external_cal_${profile.id}`);
+            if (savedEvents) {
+              try {
+                dispatch({ type: "UPDATE_EXTERNAL_EVENTS", payload: JSON.parse(savedEvents) });
+              } catch (e) { }
+            }
 
             if (profile.isApproved) {
               const [pipelines, contacts, contactLists, tasks, rdvProposals, notifications] = await Promise.all([
@@ -231,7 +269,12 @@ export function AppProvider({ children }) {
           if (profile) {
             dispatch({ type: "SET_CURRENT_USER", payload: profile });
             
-            // fetchExternalCalendar(profile.settings?.calendarUrl);
+            const savedEvents = localStorage.getItem(`paff_external_cal_${profile.id}`);
+            if (savedEvents) {
+              try {
+                dispatch({ type: "UPDATE_EXTERNAL_EVENTS", payload: JSON.parse(savedEvents) });
+              } catch (e) { }
+            }
 
             if (profile.isApproved) {
               await refreshAllData();

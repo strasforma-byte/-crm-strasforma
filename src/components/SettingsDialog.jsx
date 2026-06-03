@@ -130,17 +130,40 @@ export default function SettingsDialog({ open, onOpenChange }) {
             </div>
           )}
 
-          <div className="space-y-2">
-            <Label htmlFor="calendar-url">Lien iCal Google Calendar</Label>
-            <Input 
-              id="calendar-url" 
-              placeholder="https://calendar.google.com/calendar/ical/..." 
-              value={calendarUrl} 
-              onChange={(e) => setCalendarUrl(e.target.value)} 
-            />
-            <p className="text-[10px] text-slate-500">
-              Pour voir vos RDV Google ici : Paramètres Google Agenda &gt; Intégrer l'agenda &gt; Adresse secrète au format iCal.
-            </p>
+          <div className="space-y-3">
+            <Label>Synchronisation Google Calendar</Label>
+            <div className="grid grid-cols-1 gap-2">
+              <div 
+                className="border-2 border-dashed border-slate-200 rounded-lg p-4 text-center hover:bg-slate-50 transition-colors cursor-pointer"
+                onClick={() => document.getElementById('ical-upload').click()}
+              >
+                <input 
+                  type="file" 
+                  id="ical-upload" 
+                  className="hidden" 
+                  accept=".ics"
+                  onChange={async (e) => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onload = async (event) => {
+                        const content = event.target.result;
+                        dispatch({ type: "IMPORT_ICAL_DATA", payload: content });
+                        toast.success("Calendrier Google importé avec succès !");
+                      };
+                      reader.readAsText(file);
+                    }
+                  }}
+                />
+                <div className="flex flex-col items-center gap-2">
+                  <RefreshCw className="w-6 h-6 text-blue-500" />
+                  <p className="text-xs font-bold text-slate-700">Cliquer pour importer votre fichier .ics</p>
+                  <p className="text-[10px] text-slate-500 italic">
+                    Paramètres Google Agenda &gt; Exporter l'agenda
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
 
           <Separator />

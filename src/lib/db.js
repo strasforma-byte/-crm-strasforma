@@ -610,6 +610,25 @@ export const db = {
     return data
   },
 
+  async syncExternalEvent(eventData) {
+    const { data, error } = await supabase
+      .from('tasks')
+      .upsert({
+        id: eventData.id, // Utilise l'ID Google pour éviter les doublons
+        title: "🗓️ " + eventData.summary,
+        description: eventData.description,
+        due_date: eventData.start,
+        status: 'external',
+        assigned_to: eventData.userId,
+        type: 'google'
+      }, { onConflict: 'id' })
+      .select()
+      .single()
+    
+    if (error) throw error
+    return data
+  },
+
   async markAllNotificationsAsRead(userId) {
     const { error } = await supabase.from('notifications').update({ read: true }).eq('user_id', userId)
     if (error) throw error
