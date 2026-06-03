@@ -152,6 +152,9 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
       const taskDate = new Date(formData.date);
       const [hours, minutes] = formData.time.split(":").map(Number);
       taskDate.setHours(hours, minutes);
+      
+      const duration = parseInt(formData.duration) || 30;
+      const endDate = new Date(taskDate.getTime() + duration * 60000);
 
       // Sécurité : s'assurer qu'un utilisateur est assigné
       const assignedUserId = formData.userId || state.currentUser?.id;
@@ -165,6 +168,8 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
         type: formData.type,
         description: formData.notes,
         dueDate: taskDate.toISOString(),
+        endDate: endDate.toISOString(),
+        duration: duration,
         status: formData.status,
         assignedTo: assignedUserId,
         contactId: formData.linkedContactId,

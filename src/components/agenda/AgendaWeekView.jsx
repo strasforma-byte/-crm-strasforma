@@ -77,23 +77,38 @@ export default function AgendaWeekView({ baseDate, tasks, proposals, targetUser,
                 ))}
 
                 {/* Tasks */}
-                {tasks.filter(t => isSameDay(new Date(t.date), day)).map(task => {
+                {tasks.filter(t => isSameDay(new Date(t.date), day)).sort((a,b) => (a.time || "").localeCompare(b.time || "")).map((task, idx, arr) => {
                   let duration = task.duration || 30;
                   
                   // If task has a due_date and it's a Google event, calculate duration from start/end
-                  if (task.type === 'google' && task.dueDate && task.endDate) {
+                  if (task.dueDate && task.endDate) {
                     const start = new Date(task.dueDate);
                     const end = new Date(task.endDate);
                     duration = Math.max(30, (end - start) / (1000 * 60));
                   }
                   
+                  // Detection of overlapping for visual offset
+                  const overlapping = arr.filter(t => {
+                    const tStart = t.time;
+                    const taskStart = task.time;
+                    return tStart === taskStart;
+                  });
+                  const overlapIndex = overlapping.findIndex(t => t.id === task.id);
+                  const width = 100 / (overlapping.length || 1);
+                  const left = overlapIndex * width;
+
                   const pos = calculatePosition(task.time, duration);
                   return (
                     <div 
                       key={task.id}
                       onClick={() => onTaskClick(task)}
-                      className={`absolute left-1 right-1 rounded-md border-l-4 p-1.5 shadow-sm cursor-pointer z-10 text-white transition-all hover:scale-[1.02] hover:shadow-md ${getTaskColor(task.type)}`}
-                      style={pos}
+                      className={`absolute rounded-md border-l-4 p-1.5 shadow-sm cursor-pointer z-10 text-white transition-all hover:scale-[1.02] hover:shadow-md ${getTaskColor(task.type)}`}
+                      style={{ 
+                        ...pos, 
+                        left: `${left + 1}%`, 
+                        width: `${width - 2}%`,
+                        zIndex: 10 + overlapIndex 
+                      }}
                     >
                       <p className="text-[9px] font-bold leading-tight truncate flex items-center gap-1">
                         {task.linkedCardId && <Briefcase className="w-2 h-2 shrink-0" />}

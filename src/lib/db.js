@@ -420,10 +420,12 @@ export const db = {
       title: task.title,
       description: descriptionWithMeta,
       due_date: task.dueDate,
+      end_date: task.endDate,
       status: task.status,
       assigned_to: cleanId(task.assignedTo),
       contact_id: cleanId(task.contactId),
-      linked_card_id: cleanedLinkedCardId
+      linked_card_id: cleanedLinkedCardId,
+      type: task.type || "call"
     };
 
     try {
@@ -455,10 +457,12 @@ export const db = {
       title: task.title,
       description: descriptionWithMeta,
       due_date: task.dueDate,
+      end_date: task.endDate,
       status: task.status,
       assigned_to: cleanId(task.assignedTo),
       contact_id: cleanId(task.contactId),
-      linked_card_id: cleanedLinkedCardId
+      linked_card_id: cleanedLinkedCardId,
+      type: task.type || "call"
     };
 
     try {
