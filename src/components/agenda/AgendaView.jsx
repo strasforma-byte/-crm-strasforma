@@ -69,11 +69,15 @@ export default function AgendaView() {
   
   const userTasks = useMemo(() => {
     const tasks = Array.isArray(state.tasks) ? state.tasks : [];
-    const internalTasks = tasks.filter(t => t.userId === targetUserId);
+    let filteredTasks = tasks;
     
-    let allTasks = internalTasks;
+    if (targetUserId !== "all") {
+      filteredTasks = tasks.filter(t => t.userId === targetUserId);
+    }
+    
+    let allTasks = filteredTasks;
     if (targetUserId === state.currentUser?.id && Array.isArray(state.externalEvents)) {
-      allTasks = [...internalTasks, ...state.externalEvents];
+      allTasks = [...filteredTasks, ...state.externalEvents];
     }
     
     // Filtrage des doublons (titre + date + heure + utilisateur)
@@ -88,6 +92,7 @@ export default function AgendaView() {
 
   const userProposals = useMemo(() => {
     const proposals = Array.isArray(state.rdvProposals) ? state.rdvProposals : [];
+    if (targetUserId === "all") return proposals;
     return proposals.filter(p => p.commercialId === targetUserId || p.prospectorId === targetUserId);
   }, [state.rdvProposals, targetUserId]);
 
@@ -163,6 +168,7 @@ export default function AgendaView() {
                 </div>
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all" className="font-bold text-green-600">Vue d'ensemble (Tous)</SelectItem>
                 <SelectItem value={state.currentUser.id} className="font-bold">Mon agenda</SelectItem>
                 {(state.users || []).filter(u => u.id !== state.currentUser.id && canViewUserAgenda(u)).map(u => (
                   <SelectItem key={u.id} value={u.id} className="font-medium">Agenda de {u.name}</SelectItem>
@@ -193,9 +199,9 @@ export default function AgendaView() {
       </div>
 
       <div className="flex-1 bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-        {view === "month" && <AgendaMonthView baseDate={baseDate} tasks={userTasks} proposals={userProposals} targetUser={targetUser} onTaskClick={handleOpenTask} onProposalClick={handleOpenProposal} />}
-        {view === "week" && <AgendaWeekView baseDate={baseDate} tasks={userTasks} proposals={userProposals} targetUser={targetUser} onTaskClick={handleOpenTask} onProposalClick={handleOpenProposal} />}
-        {view === "list" && <AgendaListView baseDate={baseDate} tasks={userTasks} proposals={userProposals} targetUser={targetUser} onTaskClick={handleOpenTask} onProposalClick={handleOpenProposal} />}
+        {view === "month" && <AgendaMonthView baseDate={baseDate} tasks={userTasks} proposals={userProposals} targetUser={targetUser} isAllView={targetUserId === "all"} onTaskClick={handleOpenTask} onProposalClick={handleOpenProposal} />}
+        {view === "week" && <AgendaWeekView baseDate={baseDate} tasks={userTasks} proposals={userProposals} targetUser={targetUser} isAllView={targetUserId === "all"} onTaskClick={handleOpenTask} onProposalClick={handleOpenProposal} />}
+        {view === "list" && <AgendaListView baseDate={baseDate} tasks={userTasks} proposals={userProposals} targetUser={targetUser} isAllView={targetUserId === "all"} onTaskClick={handleOpenTask} onProposalClick={handleOpenProposal} />}
       </div>
 
       <TaskDialog 

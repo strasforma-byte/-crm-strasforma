@@ -7,7 +7,7 @@ import { useApp } from "@/context/AppContext";
 
 const HOURS = Array.from({ length: 13 }, (_, i) => i + 8); // 8h to 20h
 
-export default function AgendaWeekView({ baseDate, tasks, proposals, targetUser, onTaskClick, onProposalClick }) {
+export default function AgendaWeekView({ baseDate, tasks, proposals, targetUser, onTaskClick, onProposalClick, isAllView }) {
   const { state } = useApp();
   const today = new Date();
   const weekStart = startOfWeek(baseDate || today, { weekStartsOn: 1 });
@@ -16,8 +16,12 @@ export default function AgendaWeekView({ baseDate, tasks, proposals, targetUser,
     end: addDays(weekStart, 6),
   });
 
-  const getTaskColor = (type) => {
-    switch (type) {
+  const getTaskColor = (task) => {
+    if (isAllView) {
+      const user = state.users.find(u => u.id === task.userId);
+      return user?.color || "bg-slate-500 border-slate-600";
+    }
+    switch (task.type) {
       case "call": return "bg-blue-500 border-blue-600";
       case "email": return "bg-purple-500 border-purple-600";
       case "meeting": return "bg-green-500 border-green-600";
@@ -79,6 +83,7 @@ export default function AgendaWeekView({ baseDate, tasks, proposals, targetUser,
                 {/* Tasks */}
                 {tasks.filter(t => isSameDay(new Date(t.date), day)).sort((a,b) => (a.time || "").localeCompare(b.time || "")).map((task, idx, arr) => {
                   let duration = task.duration || 30;
+                  const user = state.users.find(u => u.id === task.userId);
                   
                   // If task has a due_date and it's a Google event, calculate duration from start/end
                   if (task.dueDate && task.endDate) {
@@ -102,19 +107,28 @@ export default function AgendaWeekView({ baseDate, tasks, proposals, targetUser,
                     <div 
                       key={task.id}
                       onClick={() => onTaskClick(task)}
-                      className={`absolute rounded-md border-l-4 p-1.5 shadow-sm cursor-pointer z-10 text-white transition-all hover:scale-[1.02] hover:shadow-md ${getTaskColor(task.type)}`}
+                      className={`absolute rounded-md border-l-4 p-1.5 shadow-sm cursor-pointer z-10 text-white transition-all hover:scale-[1.02] hover:shadow-md ${isAllView ? "" : getTaskColor(task)}`}
                       style={{ 
                         ...pos, 
                         left: `${left + 1}%`, 
                         width: `${width - 2}%`,
-                        zIndex: 10 + overlapIndex 
+                        zIndex: 10 + overlapIndex,
+                        backgroundColor: isAllView ? user?.color : undefined
                       }}
                     >
                       <p className="text-[9px] font-bold leading-tight truncate flex items-center gap-1">
-                        {task.linkedCardId && <Briefcase className="w-2 h-2 shrink-0" />}
+                        {isAllView && (
+                          <span className="w-3 h-3 rounded-full bg-white/20 flex items-center justify-center font-bold text-[7px] shrink-0">
+                            {user?.name?.charAt(0)}
+                          </span>
+                        )}
+                        {!isAllView && task.linkedCardId && <Briefcase className="w-2 h-2 shrink-0" />}
                         {task.title}
                       </p>
-                      <p className="text-[8px] opacity-80">{task.time} • {Math.round(duration)}m</p>
+                      <p className="text-[8px] opacity-80">
+                        {task.time} • {Math.round(duration)}m
+                        {isAllView && <span className="ml-1 opacity-100 font-black tracking-tighter">— {user?.name}</span>}
+                      </p>
                     </div>
                   );
                 })}

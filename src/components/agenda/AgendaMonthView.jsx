@@ -8,7 +8,7 @@ import { useApp } from "@/context/AppContext";
 import { db } from "@/lib/db";
 import { toast } from "sonner";
 
-export default function AgendaMonthView({ baseDate, tasks, proposals, onTaskClick, onProposalClick }) {
+export default function AgendaMonthView({ baseDate, tasks, proposals, onTaskClick, onProposalClick, isAllView }) {
   const { state, dispatch, refreshAllData } = useApp();
   const today = new Date();
   const referenceDate = baseDate || today;
@@ -64,8 +64,12 @@ export default function AgendaMonthView({ baseDate, tasks, proposals, onTaskClic
     }
   };
 
-  const getTaskColor = (type) => {
-    switch (type) {
+  const getTaskColor = (task) => {
+    if (isAllView) {
+      const user = state.users.find(u => u.id === task.userId);
+      return user?.color || "bg-slate-500";
+    }
+    switch (task.type) {
       case "call": return "bg-blue-500";
       case "email": return "bg-purple-500";
       case "meeting": return "bg-green-500";
@@ -106,35 +110,52 @@ export default function AgendaMonthView({ baseDate, tasks, proposals, onTaskClic
               </div>
 
               <div className="flex-1 space-y-1 overflow-hidden">
-                {dayTasks.slice(0, 3).map(task => (
-                  <div key={task.id} className="group relative">
-                    <button
-                      onClick={() => onTaskClick(task)}
-                      className={`w-full text-left px-1.5 py-0.5 rounded text-[9px] text-white flex items-center gap-1 truncate ${getTaskColor(task.type)} ${task.status === 'done' ? 'opacity-50' : ''}`}
-                    >
-                      {task.linkedCardId ? <Briefcase className="w-2 h-2 shrink-0" /> : getTaskIcon(task.type)}
-                      <span className="truncate">{task.title}</span>
-                    </button>
-                    {task.status !== 'done' && (
-                      <button 
-                        className="absolute right-0 top-0 h-full px-1 bg-white/20 hover:bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-r"
-                        onClick={(e) => handleComplete(e, task)}
+                {dayTasks.slice(0, 3).map(task => {
+                  const user = state.users.find(u => u.id === task.userId);
+                  return (
+                    <div key={task.id} className="group relative">
+                      <button
+                        onClick={() => onTaskClick(task)}
+                        className={`w-full text-left px-1.5 py-0.5 rounded text-[9px] text-white flex items-center gap-1 truncate ${isAllView ? "" : getTaskColor(task)} ${task.status === 'done' ? 'opacity-50' : ''}`}
+                        style={isAllView ? { backgroundColor: user?.color } : {}}
                       >
-                        <Check className="w-2.5 h-2.5 text-white" />
+                        {isAllView && (
+                          <span className="w-3 h-3 rounded-full bg-white/20 flex items-center justify-center font-bold text-[7px] shrink-0">
+                            {user?.name?.charAt(0)}
+                          </span>
+                        )}
+                        {!isAllView && (task.linkedCardId ? <Briefcase className="w-2 h-2 shrink-0" /> : getTaskIcon(task.type))}
+                        <span className="truncate">{task.title}</span>
                       </button>
-                    )}
-                  </div>
-                ))}
+                      {task.status !== 'done' && (
+                        <button 
+                          className="absolute right-0 top-0 h-full px-1 bg-white/20 hover:bg-white/40 opacity-0 group-hover:opacity-100 transition-opacity rounded-r"
+                          onClick={(e) => handleComplete(e, task)}
+                        >
+                          <Check className="w-2.5 h-2.5 text-white" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
                 
-                {dayProposals.slice(0, 2).map(prop => (
-                  <button
-                    key={prop.id}
-                    onClick={() => onProposalClick(prop)}
-                    className="w-full text-left px-1.5 py-0.5 rounded text-[9px] bg-amber-400 text-amber-900 border border-amber-500/20 font-bold truncate flex items-center gap-1"
-                  >
-                    📋 {prop.title}
-                  </button>
-                ))}
+                {dayProposals.slice(0, 2).map(prop => {
+                  const prospector = state.users.find(u => u.id === prop.prospectorId);
+                  return (
+                    <button
+                      key={prop.id}
+                      onClick={() => onProposalClick(prop)}
+                      className="w-full text-left px-1.5 py-0.5 rounded text-[9px] bg-amber-400 text-amber-900 border border-amber-500/20 font-bold truncate flex items-center gap-1"
+                    >
+                      {isAllView && (
+                        <span className="w-3 h-3 rounded-full bg-amber-900/10 flex items-center justify-center font-bold text-[7px] shrink-0">
+                          {prospector?.name?.charAt(0)}
+                        </span>
+                      )}
+                      <span className="truncate">📋 {prop.title}</span>
+                    </button>
+                  );
+                })}
 
                 {(dayTasks.length + dayProposals.length) > 5 && (
                   <Popover>
@@ -146,21 +167,25 @@ export default function AgendaMonthView({ baseDate, tasks, proposals, onTaskClic
                     <PopoverContent className="w-64 p-2">
                       <div className="space-y-1">
                         <p className="text-xs font-bold mb-2 pb-1 border-b">{format(day, "dd MMMM", { locale: fr })}</p>
-                        {dayTasks.map(task => (
-                          <div key={task.id} className="group relative flex items-center gap-2 p-1 rounded hover:bg-slate-50 cursor-pointer" onClick={() => onTaskClick(task)}>
-                            <div className={`w-2 h-2 rounded-full ${getTaskColor(task.type)}`} />
-                            <span className="text-xs truncate">{task.title}</span>
-                            <span className="text-[10px] text-slate-400 ml-auto">{task.time}</span>
-                            {task.status !== 'done' && (
-                              <button 
-                                className="ml-2 p-1 text-slate-300 hover:text-green-600 opacity-0 group-hover:opacity-100 transition-opacity"
-                                onClick={(e) => handleComplete(e, task)}
-                              >
-                                <CheckCircle2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
-                        ))}
+                        {dayTasks.map(task => {
+                          const user = state.users.find(u => u.id === task.userId);
+                          return (
+                            <div key={task.id} className="group relative flex items-center gap-2 p-1 rounded hover:bg-slate-50 cursor-pointer" onClick={() => onTaskClick(task)}>
+                              <div className={`w-2 h-2 rounded-full`} style={{ backgroundColor: isAllView ? user?.color : getTaskColor(task) }} />
+                              <span className="text-xs truncate">{task.title}</span>
+                              {isAllView && <span className="text-[9px] font-bold text-slate-400 px-1.5 py-0.5 bg-slate-100 rounded ml-1">{user?.name}</span>}
+                              <span className="text-[10px] text-slate-400 ml-auto">{task.time}</span>
+                              {task.status !== 'done' && (
+                                <button 
+                                  className="ml-2 p-1 text-slate-300 hover:text-green-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                  onClick={(e) => handleComplete(e, task)}
+                                >
+                                  <CheckCircle2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
                       </div>
                     </PopoverContent>
                   </Popover>

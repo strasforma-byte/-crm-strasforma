@@ -11,7 +11,7 @@ import { db } from "@/lib/db";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 
-export default function AgendaListView({ baseDate, tasks, proposals, onTaskClick, onProposalClick }) {
+export default function AgendaListView({ baseDate, tasks, proposals, onTaskClick, onProposalClick, isAllView }) {
   const { state, dispatch, refreshAllData } = useApp();
   const today = new Date();
 
@@ -201,11 +201,14 @@ export default function AgendaListView({ baseDate, tasks, proposals, onTaskClick
               </div>
 
               <div className="grid gap-3">
-                {group.tasks.map(task => (
+                {group.tasks.map(task => {
+                  const user = state.users.find(u => u.id === task.userId);
+                  return (
                   <Card 
                     key={task.id} 
                     className={`p-4 cursor-pointer hover:bg-slate-50 transition-all group border-l-4 ${task.status === 'done' ? 'opacity-60 border-l-slate-300' : 'border-l-green-600'}`}
                     onClick={() => onTaskClick(task)}
+                    style={isAllView && task.status !== 'done' ? { borderLeftColor: user?.color } : {}}
                   >
                     <div className="flex items-center gap-4">
                       <div className="shrink-0">
@@ -215,6 +218,11 @@ export default function AgendaListView({ baseDate, tasks, proposals, onTaskClick
                         <div className="flex items-center gap-2">
                           <p className={`font-bold text-sm truncate ${task.status === 'done' ? 'line-through' : ''}`}>{task.title}</p>
                           <Badge variant="outline" className="text-[10px] uppercase shrink-0">{task.type}</Badge>
+                          {isAllView && user && (
+                            <Badge className="text-[9px] font-bold uppercase tracking-tight h-5" style={{ backgroundColor: user.color }}>
+                              {user.name}
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-1">
                           <span className="text-xs text-slate-400 flex items-center">
@@ -264,9 +272,12 @@ export default function AgendaListView({ baseDate, tasks, proposals, onTaskClick
                       )}
                     </div>
                   </Card>
-                ))}
+                );
+              })}
 
-                {group.proposals.map(prop => (
+                {group.proposals.map(prop => {
+                  const prospector = state.users.find(u => u.id === prop.prospectorId);
+                  return (
                   <Card 
                     key={prop.id} 
                     className="p-4 cursor-pointer hover:bg-slate-50 transition-colors border-l-4 border-l-amber-400 bg-amber-50/30"
@@ -278,14 +289,20 @@ export default function AgendaListView({ baseDate, tasks, proposals, onTaskClick
                         <div className="flex items-center gap-2">
                           <p className="font-bold text-sm">PROPOSITION : {prop.title}</p>
                           <Badge className="bg-amber-400 text-amber-900 text-[10px] uppercase">En attente</Badge>
+                          {isAllView && prospector && (
+                            <Badge variant="outline" className="text-[9px] border-amber-500 text-amber-600 font-bold uppercase h-5">
+                              {prospector.name}
+                            </Badge>
+                          )}
                         </div>
                         <p className="text-xs text-slate-500 mt-1">
-                          Proposé par {state.users.find(u => u.id === prop.prospectorId)?.name} pour {format(new Date(prop.proposedDate), "HH:mm")}
+                          Proposé par {prospector?.name} pour {format(new Date(prop.proposedDate), "HH:mm")}
                         </p>
                       </div>
                     </div>
                   </Card>
-                ))}
+                );
+              })}
               </div>
             </div>
           ))
