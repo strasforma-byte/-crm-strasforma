@@ -58,8 +58,18 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
 
   useEffect(() => {
     if (task && task.id) {
+      let duration = task.duration || "30";
+      if (!task.duration && task.dueDate && task.endDate) {
+        const start = new Date(task.dueDate);
+        const end = new Date(task.endDate);
+        if (!isNaN(start.getTime()) && !isNaN(end.getTime())) {
+          duration = String(Math.max(15, Math.round((end - start) / 60000)));
+        }
+      }
+
       setFormData({
         ...task,
+        duration: String(duration),
         date: task.date ? new Date(task.date) : (task.dueDate ? new Date(task.dueDate) : new Date()),
         linkedContactId: task.linkedContactId || "none",
         linkedCardId: task.linkedCardId || "none",
@@ -389,7 +399,6 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
               className="h-9 text-xs border-slate-200 bg-slate-50/50"
               onChange={e => setFormData({...formData, title: e.target.value})} 
               placeholder="Ex: Rappeler client" 
-              disabled={isGoogleTask}
             />
           </div>
 
@@ -398,7 +407,6 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
             <Select 
               value={formData.type} 
               onValueChange={val => setFormData({...formData, type: val})}
-              disabled={isGoogleTask}
             >
               <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
                 <SelectValue />
@@ -419,7 +427,6 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
             <Select 
               value={formData.duration} 
               onValueChange={val => setFormData({...formData, duration: val})}
-              disabled={isGoogleTask}
             >
               <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
                 <SelectValue />
@@ -429,7 +436,10 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
                 <SelectItem value="30" className="text-xs">30 min</SelectItem>
                 <SelectItem value="45" className="text-xs">45 min</SelectItem>
                 <SelectItem value="60" className="text-xs">1h</SelectItem>
+                <SelectItem value="90" className="text-xs">1h30</SelectItem>
                 <SelectItem value="120" className="text-xs">2h</SelectItem>
+                <SelectItem value="180" className="text-xs">3h</SelectItem>
+                <SelectItem value="240" className="text-xs">4h</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -441,23 +451,20 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
                 <Button 
                   variant="outline" 
                   className="w-full h-9 justify-start text-left font-medium text-xs border-slate-200 bg-slate-50/50"
-                  disabled={isGoogleTask}
                 >
                   <CalendarIcon className="mr-2 h-3.5 w-3.5 text-slate-400" />
                   {format(formData.date, "dd/MM/yyyy")}
                 </Button>
               </PopoverTrigger>
-              {!isGoogleTask && (
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={formData.date}
-                    onSelect={date => setFormData({...formData, date: date || new Date()})}
-                    initialFocus
-                    locale={fr}
-                  />
-                </PopoverContent>
-              )}
+              <PopoverContent className="w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  selected={formData.date}
+                  onSelect={date => setFormData({...formData, date: date || new Date()})}
+                  initialFocus
+                  locale={fr}
+                />
+              </PopoverContent>
             </Popover>
           </div>
 
@@ -468,7 +475,6 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
               className="h-9 text-xs border-slate-200 bg-slate-50/50"
               value={formData.time} 
               onChange={e => setFormData({...formData, time: e.target.value})} 
-              disabled={isGoogleTask}
             />
           </div>
 
