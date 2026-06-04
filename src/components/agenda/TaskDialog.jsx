@@ -177,19 +177,25 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
       };
 
       if (task && task.id) {
-        // If it was a Google task (from externalEvents), we might need to convert it to a local task 
-        // if we are changing its assignee or other fields.
-        const savedTask = await db.updateTask(task.id, taskData);
+        let savedTask;
+        const isExistingLocal = state.tasks.some(t => t.id === task.id);
         
-        // Update both tasks and externalEvents to ensure UI stays in sync
-        const updatedTasks = state.tasks.some(t => t.id === task.id) 
-          ? state.tasks.map(t => t.id === task.id ? savedTask : t)
-          : [...state.tasks, savedTask];
+        if (isExistingLocal) {
+          savedTask = await db.updateTask(task.id, taskData);
+          const updated = state.tasks.map(t => t.id === task.id ? savedTask : t);
+          dispatch({ type: "UPDATE_TASKS", payload: updated });
+        } else {
+          // Conversion d'une tâche Google en tâche interne
+          // On s'assure que le statut n'est plus "external"
+          const internalTaskData = { ...taskData, status: "pending" };
+          savedTask = await db.insertTask(internalTaskData);
           
-        const updatedExternal = (state.externalEvents || []).filter(t => t.id !== task.id);
-        
-        dispatch({ type: "UPDATE_TASKS", payload: updatedTasks });
-        dispatch({ type: "UPDATE_EXTERNAL_EVENTS", payload: updatedExternal });
+          dispatch({ type: "UPDATE_TASKS", payload: [...state.tasks, savedTask] });
+          
+          // Retirer de la liste des événements externes pour éviter les doublons
+          const updatedExternal = (state.externalEvents || []).filter(t => t.id !== task.id);
+          dispatch({ type: "UPDATE_EXTERNAL_EVENTS", payload: updatedExternal });
+        }
         
         toast.success("Action mise à jour");
       } else {
