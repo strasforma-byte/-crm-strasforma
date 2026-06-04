@@ -124,12 +124,16 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
   );
 
   const allActivity = useMemo(() => {
+    if (!card) return [];
     const activities = [];
 
     // 1. Audit History from the card itself
     (card.history || []).forEach(h => {
+      if (!h.date) return;
+      const d = new Date(h.date);
+      if (isNaN(d.getTime())) return;
       activities.push({
-        date: new Date(h.date),
+        date: d,
         type: 'audit',
         action: h.action,
         user: state.users.find(u => u.id === h.userId)?.name || "Système"
@@ -139,9 +143,14 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
     // 2. Notes from Tasks linked to this card
     const cardTasks = (state.tasks || []).filter(t => t.linkedCardId === card.id);
     cardTasks.forEach(t => {
+      const taskDateRaw = t.dueDate || t.date;
+      if (!taskDateRaw) return;
+      const d = new Date(taskDateRaw);
+      if (isNaN(d.getTime())) return;
+      
       if (t.description || t.notes) {
         activities.push({
-          date: new Date(t.dueDate || t.date),
+          date: d,
           type: 'task_note',
           title: t.title,
           content: t.description || t.notes,
@@ -154,8 +163,11 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
     // 3. Interactions from the Contact
     if (selectedContact) {
       (selectedContact.interactions || []).forEach(int => {
+        if (!int.date) return;
+        const d = new Date(int.date);
+        if (isNaN(d.getTime())) return;
         activities.push({
-          date: new Date(int.date),
+          date: d,
           type: 'interaction',
           subType: int.type,
           content: int.content,

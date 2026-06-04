@@ -114,7 +114,7 @@ const mapPipeline = (p) => ({
     id: col.id,
     name: col.name,
     order: col.order,
-    cards: col.pipeline_cards ? col.pipeline_cards.map(mapCard) : []
+    cards: col.pipeline_cards ? col.pipeline_cards.map(mapCard).filter(Boolean) : []
   })).sort((a, b) => a.order - b.order) : []
 })
 
@@ -369,6 +369,7 @@ export const db = {
       const { data: current, error: fetchError } = await supabase.from('pipeline_cards').select('*').eq('id', id).single();
       if (fetchError) throw fetchError;
       const oldCard = mapCard(current);
+      if (!oldCard) throw new Error("Affaire non trouvée");
 
       // 2. Prepare new history entries
       const newHistory = [...(updates.history || oldCard.history || [])];
