@@ -187,7 +187,7 @@ export default function SettingsDialog({ open, onOpenChange }) {
                   <RefreshCw className="w-6 h-6 text-blue-500" />
                   <p className="text-xs font-bold text-slate-700">Cliquer pour importer votre fichier .ics</p>
                   <p className="text-[10px] text-slate-500 italic">
-                    Paramètres Google Agenda > Exporter l'agenda
+                    Paramètres Google Agenda &gt; Exporter l'agenda
                     </p>
                     </div>
                     </div>
