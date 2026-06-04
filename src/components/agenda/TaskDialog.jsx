@@ -57,10 +57,10 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
   const [isClientSearchOpen, setIsClientSearchOpen] = useState(false);
 
   useEffect(() => {
-    if (task) {
+    if (task && task.id) {
       setFormData({
         ...task,
-        date: new Date(task.date),
+        date: task.date ? new Date(task.date) : (task.dueDate ? new Date(task.dueDate) : new Date()),
         linkedContactId: task.linkedContactId || "none",
         linkedCardId: task.linkedCardId || "none",
       });
@@ -71,8 +71,8 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
         date: new Date(),
         time: "09:00",
         duration: "30",
-        linkedContactId: defaultContactId || "none",
-        linkedCardId: defaultCardId || "none",
+        linkedContactId: task?.linkedContactId || defaultContactId || "none",
+        linkedCardId: task?.linkedCardId || defaultCardId || "none",
         userId: state.currentUser?.id || "",
         notes: "",
         status: "pending"
@@ -176,7 +176,7 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
         linkedCardId: formData.linkedCardId
       };
 
-      if (task) {
+      if (task && task.id) {
         const savedTask = await db.updateTask(task.id, taskData);
         const updated = state.tasks.map(t => t.id === task.id ? savedTask : t);
         dispatch({ type: "UPDATE_TASKS", payload: updated });
@@ -222,7 +222,7 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
   };
 
   const handleDelete = async () => {
-    if (!task) return;
+    if (!task || !task.id) return;
     
     try {
       // 1. Delete from DB
@@ -275,11 +275,12 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
   };
 
   const handleToggleStatus = async () => {
+    if (!task || !task.id) return;
     const newStatus = formData.status === "done" ? "pending" : "done";
     setFormData({...formData, status: newStatus});
     
     try {
-      if (task) {
+      if (task && task.id) {
         const updatedTaskData = { ...task, status: newStatus };
         await db.updateTask(task.id, updatedTaskData);
         
@@ -608,12 +609,12 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
 
         <DialogFooter className="gap-2 sm:justify-between">
           <div className="flex gap-2">
-            {!isGoogleTask && task && (
+            {!isGoogleTask && task && task.id && (
               <Button variant="outline" size="icon" className="h-9 w-9 text-red-600 border-red-100 hover:bg-red-50" onClick={handleDelete}>
                 <Trash2 className="w-4 h-4" />
               </Button>
             )}
-            {!isGoogleTask && task && (
+            {!isGoogleTask && task && task.id && (
               <Button variant="outline" className={cn("h-9 text-xs", formData.status === 'done' ? 'text-blue-600 border-blue-100 hover:bg-blue-50' : 'text-green-600 border-green-100 hover:bg-green-50')} onClick={handleToggleStatus}>
                 <Check className="w-4 h-4 mr-2" />
                 {formData.status === 'done' ? "Réouvrir" : "Terminer"}
