@@ -29,7 +29,8 @@ import {
   Tag as TagIcon,
   Loader2,
   Phone,
-  Mail
+  Mail,
+  StickyNote
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -123,21 +124,66 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
     [state.contacts, formData.clientId]
   );
 
+  const handleLogNote = async () => {
+    if (!formData.notes.trim()) return;
+    
+    try {
+      const now = new Date().toISOString();
+      const newEntry = {
+        date: now,
+        userId: state.currentUser.id,
+        action: `Note ajoutée : ${formData.notes.trim()}`,
+        type: 'internal_note',
+        content: formData.notes.trim()
+      };
+
+      const updatedCard = {
+        ...card,
+        history: [newEntry, ...(card.history || [])],
+        notes: ""
+      };
+
+      await db.updateCard(card.id, updatedCard);
+      
+      const updatedPipelines = state.pipelines.map(p => {
+        const hasCard = p.columns.some(col => col.cards.some(c => c.id === card.id));
+        if (hasCard) {
+          return {
+            ...p,
+            columns: p.columns.map(col => ({
+              ...col,
+              cards: col.cards.map(c => c.id === card.id ? { ...c, history: updatedCard.history, notes: "" } : c)
+            }))
+          };
+        }
+        return p;
+      });
+
+      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+      setFormData({ ...formData, notes: "" });
+      toast.success("Note ajoutée à l'historique");
+    } catch (error) {
+      toast.error("Erreur lors de l'ajout de la note");
+    }
+  };
+
   const allActivity = useMemo(() => {
     try {
       if (!card) return [];
       const activities = [];
 
-      // 1. Audit History from the card itself
+      // 1. Audit History & Internal Notes from the card itself
       const cardHistory = Array.isArray(card.history) ? card.history : [];
       cardHistory.forEach(h => {
         if (!h || !h.date) return;
         const d = new Date(h.date);
         if (isNaN(d.getTime())) return;
+        
         activities.push({
           date: d,
-          type: 'audit',
+          type: h.type === 'internal_note' ? 'internal_note' : 'audit',
           action: String(h.action || "Action inconnue"),
+          content: h.content,
           user: state.users?.find(u => u.id === h.userId)?.name || "Système"
         });
       });
@@ -655,13 +701,25 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
 
             {/* Notes */}
             <div className="space-y-4">
-              <Label className="text-[10px] uppercase font-bold tracking-widest text-slate-400">Notes internes</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-[10px] uppercase font-bold tracking-widest text-slate-400">Ajouter une note de suivi</Label>
+                <Button 
+                  variant="ghost" 
+                  size="sm" 
+                  className="h-6 text-[9px] font-black text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                  onClick={handleLogNote}
+                  disabled={!formData.notes.trim()}
+                >
+                  <StickyNote className="w-3 h-3 mr-1" /> ENREGISTRER LA NOTE
+                </Button>
+              </div>
               <Textarea 
-                placeholder="Détails supplémentaires sur l'affaire..." 
-                className="min-h-[120px] bg-slate-50/50 text-xs border-slate-100 focus:bg-white transition-colors"
+                placeholder="Écrivez un commentaire ou une note ici..." 
+                className="min-h-[80px] bg-slate-50/50 text-xs border-slate-100 focus:bg-white transition-colors"
                 value={formData.notes}
                 onChange={e => setFormData({...formData, notes: e.target.value})}
               />
+              <p className="text-[9px] text-slate-400 italic">La note sera archivée chronologiquement dans le journal ci-dessous.</p>
             </div>
 
             <Separator />
@@ -686,7 +744,8 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
                         <div key={i} className="text-[11px] relative">
                           <div className={`absolute -left-[21px] top-0.5 w-3 h-3 rounded-full border-2 border-white shadow-sm ${
                             act.type === 'audit' ? 'bg-slate-400' : 
-                            act.type === 'task_note' ? 'bg-indigo-500' : 'bg-blue-500'
+                            act.type === 'task_note' ? 'bg-indigo-500' : 
+                            act.type === 'internal_note' ? 'bg-amber-500' : 'bg-blue-500'
                           }`} />
                           
                           <div className="flex items-center gap-2 mb-1">
@@ -696,6 +755,15 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
 
                           {act.type === 'audit' && (
                             <p className="text-slate-600 font-medium italic">{act.action}</p>
+                          )}
+
+                          {act.type === 'internal_note' && (
+                            <div className="bg-amber-50/50 p-2 rounded-lg border border-amber-100/50">
+                              <p className="font-bold text-amber-700 flex items-center gap-1.5 mb-1 text-[10px] uppercase tracking-tight">
+                                <StickyNote className="w-3 h-3" /> NOTE INTERNE
+                              </p>
+                              <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">{act.content}</p>
+                            </div>
                           )}
 
                           {act.type === 'task_note' && (
