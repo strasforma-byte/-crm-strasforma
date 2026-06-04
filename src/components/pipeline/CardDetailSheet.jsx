@@ -124,60 +124,67 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
   );
 
   const allActivity = useMemo(() => {
-    if (!card) return [];
-    const activities = [];
+    try {
+      if (!card) return [];
+      const activities = [];
 
-    // 1. Audit History from the card itself
-    (card.history || []).forEach(h => {
-      if (!h.date) return;
-      const d = new Date(h.date);
-      if (isNaN(d.getTime())) return;
-      activities.push({
-        date: d,
-        type: 'audit',
-        action: h.action,
-        user: state.users.find(u => u.id === h.userId)?.name || "Système"
-      });
-    });
-
-    // 2. Notes from Tasks linked to this card
-    const cardTasks = (state.tasks || []).filter(t => t.linkedCardId === card.id);
-    cardTasks.forEach(t => {
-      const taskDateRaw = t.dueDate || t.date;
-      if (!taskDateRaw) return;
-      const d = new Date(taskDateRaw);
-      if (isNaN(d.getTime())) return;
-      
-      if (t.description || t.notes) {
-        activities.push({
-          date: d,
-          type: 'task_note',
-          title: t.title,
-          content: t.description || t.notes,
-          status: t.status,
-          user: state.users.find(u => u.id === t.userId)?.name || "Agent"
-        });
-      }
-    });
-
-    // 3. Interactions from the Contact
-    if (selectedContact) {
-      (selectedContact.interactions || []).forEach(int => {
-        if (!int.date) return;
-        const d = new Date(int.date);
+      // 1. Audit History from the card itself
+      const cardHistory = Array.isArray(card.history) ? card.history : [];
+      cardHistory.forEach(h => {
+        if (!h || !h.date) return;
+        const d = new Date(h.date);
         if (isNaN(d.getTime())) return;
         activities.push({
           date: d,
-          type: 'interaction',
-          subType: int.type,
-          content: int.content,
-          user: state.users.find(u => u.id === int.userId)?.name || "Agent"
+          type: 'audit',
+          action: String(h.action || "Action inconnue"),
+          user: state.users?.find(u => u.id === h.userId)?.name || "Système"
         });
       });
-    }
 
-    return activities.sort((a, b) => b.date - a.date);
-  }, [card.history, state.tasks, card.id, selectedContact, state.users]);
+      // 2. Notes from Tasks linked to this card
+      const allTasks = Array.isArray(state.tasks) ? state.tasks : [];
+      const cardTasks = allTasks.filter(t => t && t.linkedCardId === card.id);
+      cardTasks.forEach(t => {
+        const taskDateRaw = t.dueDate || t.date;
+        if (!taskDateRaw) return;
+        const d = new Date(taskDateRaw);
+        if (isNaN(d.getTime())) return;
+        
+        if (t.description || t.notes) {
+          activities.push({
+            date: d,
+            type: 'task_note',
+            title: String(t.title || "Tâche"),
+            content: String(t.description || t.notes || ""),
+            status: t.status,
+            user: state.users?.find(u => u.id === t.userId)?.name || "Agent"
+          });
+        }
+      });
+
+      // 3. Interactions from the Contact
+      if (selectedContact && Array.isArray(selectedContact.interactions)) {
+        selectedContact.interactions.forEach(int => {
+          if (!int || !int.date) return;
+          const d = new Date(int.date);
+          if (isNaN(d.getTime())) return;
+          activities.push({
+            date: d,
+            type: 'interaction',
+            subType: String(int.type || "call"),
+            content: String(int.content || ""),
+            user: state.users?.find(u => u.id === int.userId)?.name || "Agent"
+          });
+        });
+      }
+
+      return activities.sort((a, b) => b.date.getTime() - a.date.getTime());
+    } catch (error) {
+      console.error("Error in allActivity memo:", error);
+      return [];
+    }
+  }, [card?.history, state.tasks, card?.id, selectedContact, state.users]);
 
   if (!card) return null;
 

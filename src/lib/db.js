@@ -49,17 +49,21 @@ const toDbContact = (c) => ({
 
 const mapCard = (card) => {
   if (!card) return null;
-  let rawNotes = card.notes || "";
+  let rawNotes = String(card.notes || "");
   let history = [];
 
-  // Extract history from all possible [history:...] tags and clean notes
-  const historyMatch = rawNotes.match(/\[history:(.+?)\]/);
-  if (historyMatch) {
-    try {
-      history = JSON.parse(historyMatch[1]);
-    } catch (e) {
-      console.error("Error parsing history metadata:", e);
+  try {
+    // Extract history from all possible [history:...] tags and clean notes
+    const historyMatch = rawNotes.match(/\[history:(.+?)\]/);
+    if (historyMatch && historyMatch[1]) {
+      try {
+        history = JSON.parse(historyMatch[1]);
+      } catch (e) {
+        console.error("Error parsing history metadata:", e);
+      }
     }
+  } catch (e) {
+    console.error("Error matching history regex:", e);
   }
 
   // Clean all [history:...] tags from the notes
@@ -67,24 +71,24 @@ const mapCard = (card) => {
 
   return {
     id: card.id,
-    title: card.title,
-    value: card.value,
+    title: String(card.title || "Sans titre"),
+    value: Number(card.value || 0),
     priority: card.priority,
-    tags: card.tags || [],
-    order: card.order,
+    tags: Array.isArray(card.tags) ? card.tags : [],
+    order: Number(card.order || 0),
     contactId: card.contact_id,
     responsibleId: card.responsible_id,
     notes: cleanNotes,
     columnId: card.column_id,
     fundingSource: card.funding_source,
-    history: history,
+    history: Array.isArray(history) ? history : [],
     createdAt: card.created_at
   };
 }
 
 const toDbCard = (card) => {
   // Always clean any existing history tags from notes before appending current history
-  let baseNotes = (card.notes || "").replace(/\[history:.+?\]/g, "").trim();
+  let baseNotes = String(card.notes || "").replace(/\[history:.+?\]/g, "").trim();
   let notesWithMeta = baseNotes;
   
   if (card.history && card.history.length > 0) {
@@ -151,7 +155,7 @@ export const db = {
   async getProfiles() {
     const { data, error } = await supabase.from('profiles').select('*').order('created_at', { ascending: false })
     if (error) throw error
-    return data.map(mapProfile)
+    return (data || []).map(mapProfile)
   },
 
   async updateUserProfile(id, updates) {
@@ -181,7 +185,9 @@ export const db = {
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      allData = [...allData, ...data];
+      if (data) {
+        allData = [...allData, ...data];
+      }
     }
 
     return allData.map(mapContact);
@@ -249,7 +255,7 @@ export const db = {
   async getContactLists() {
     const { data, error } = await supabase.from('contact_lists').select('*')
     if (error) throw error
-    return data
+    return data || []
   },
 
   async insertContactList(list) {
@@ -275,7 +281,7 @@ export const db = {
         )
       `)
     if (error) throw error
-    return data.map(mapPipeline)
+    return (data || []).map(mapPipeline)
   },
 
   async getPipelineById(id) {
@@ -409,7 +415,7 @@ export const db = {
     try {
       const { data, error } = await supabase.from('tasks').select('*')
       if (error) throw error
-      return data.map(t => this._mapSingleTask(t))
+      return (data || []).map(t => this._mapSingleTask(t))
     } catch (error) {
       console.error("Error fetching tasks:", error);
       throw error;
@@ -558,7 +564,7 @@ export const db = {
   async getProposals() {
     const { data, error } = await supabase.from('rdv_proposals').select('*')
     if (error) throw error
-    return data.map(mapProposal)
+    return (data || []).map(mapProposal)
   },
 
   async insertProposal(proposal) {
@@ -605,7 +611,7 @@ export const db = {
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
     if (error) throw error
-    return data
+    return data || []
   },
 
   async insertNotification(notif) {

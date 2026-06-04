@@ -326,21 +326,6 @@ export default function KanbanBoard({ pipeline, onQuickCreate, onCardClick }) {
         </DragOverlay>
       </DndContext>
 
-      <CardDetailSheet 
-        card={selectedCard} 
-        pipeline={pipeline}
-        open={isSheetOpen} 
-        onOpenChange={setIsSheetOpen} 
-      />
-
-      <TaskDialog 
-        task={null}
-        open={isTaskDialogOpen}
-        onOpenChange={setIsTaskDialogOpen}
-        defaultCardId={selectedCard?.id}
-        defaultContactId={selectedCard?.contactId || selectedCard?.clientId}
-      />
-
       <Dialog open={isReasonDialogOpen} onOpenChange={(val) => {
         setIsReasonDialogOpen(val);
         if (!val) { setReasonText(""); setPendingMove(null); }

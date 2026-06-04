@@ -93,7 +93,7 @@ export default function UrgencesView() {
   const today = startOfToday();
 
   const filteredTasks = useMemo(() => {
-    let tasks = state.tasks; // All tasks, including "done" for progress calculation
+    let tasks = Array.isArray(state.tasks) ? state.tasks : [];
     if (!isAdmin) {
       tasks = tasks.filter(t => t.userId === currentUser.id);
     } else if (userFilter !== "all") {
@@ -117,7 +117,8 @@ export default function UrgencesView() {
     : 100;
 
   const pendingProposals = useMemo(() => {
-    let props = state.rdvProposals.filter(p => p.status === "pending");
+    const allProposals = Array.isArray(state.rdvProposals) ? state.rdvProposals : [];
+    let props = allProposals.filter(p => p.status === "pending");
     if (!isAdmin) {
       props = props.filter(p => p.commercialId === currentUser.id);
     } else if (userFilter !== "all") {
@@ -127,9 +128,13 @@ export default function UrgencesView() {
   }, [state.rdvProposals, userFilter, isAdmin, currentUser]);
 
   const ProposalItem = ({ proposal }) => {
-    const prospector = state.users.find(u => u.id === proposal.prospectorId);
-    const contact = state.contacts.find(c => c.id === proposal.linkedContactId);
-    const card = (Array.isArray(state.pipelines) ? state.pipelines : []).flatMap(p => (p.columns || []).flatMap(col => (col.cards || []))).find(c => c.id === proposal.linkedCardId);
+    const users = Array.isArray(state.users) ? state.users : [];
+    const contacts = Array.isArray(state.contacts) ? state.contacts : [];
+    const pipelines = Array.isArray(state.pipelines) ? state.pipelines : [];
+    
+    const prospector = users.find(u => u.id === proposal.prospectorId);
+    const contact = contacts.find(c => c.id === proposal.linkedContactId);
+    const card = pipelines.flatMap(p => (p.columns || []).flatMap(col => (col.cards || []))).find(c => c.id === proposal.linkedCardId);
 
     return (
       <Card 
@@ -437,15 +442,19 @@ export default function UrgencesView() {
   };
 
   const TaskItem = ({ task }) => {
-    const contact = state.contacts.find(c => c.id === task.linkedContactId);
+    const contacts = Array.isArray(state.contacts) ? state.contacts : [];
+    const users = Array.isArray(state.users) ? state.users : [];
+    const pipelines = Array.isArray(state.pipelines) ? state.pipelines : [];
+    
+    const contact = contacts.find(c => c.id === task.linkedContactId);
     
     // Improved card detection: if task has no linkedCardId, try to find one via the contact
-    const allCards = (Array.isArray(state.pipelines) ? state.pipelines : []).flatMap(p => (p.columns || []).flatMap(col => (col.cards || [])));
+    const allCards = pipelines.flatMap(p => (p.columns || []).flatMap(col => (col.cards || [])));
     const card = allCards.find(c => 
       c.id === task.linkedCardId || (contact && !task.linkedCardId && (c.contactId === contact.id || c.clientId === contact.id))
     );
     
-    const assignedUser = state.users.find(u => u.id === task.userId);
+    const assignedUser = users.find(u => u.id === task.userId);
 
     return (
       <Card 

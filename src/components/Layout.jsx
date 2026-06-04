@@ -241,7 +241,12 @@ export default function Layout() {
                     >
                       <p className={!n.read ? 'font-bold text-slate-900' : 'text-slate-600'}>{n.message}</p>
                       <span className="text-[10px] text-slate-400 font-medium">
-                        {formatDistanceToNow(new Date(n.created_at || n.createdAt), { addSuffix: true, locale: fr })}
+                        {(() => {
+                          const d = new Date(n.created_at || n.createdAt);
+                          return !isNaN(d.getTime()) 
+                            ? formatDistanceToNow(d, { addSuffix: true, locale: fr })
+                            : "Récemment";
+                        })()}
                       </span>
                     </div>
                   ))
@@ -259,7 +264,7 @@ export default function Layout() {
                 </div>
                 <Avatar className="w-8 h-8" style={{ backgroundColor: user.color }}>
                   <AvatarFallback className="text-white text-xs font-bold">
-                    {user.name?.charAt(0).toUpperCase()}
+                    {user.name ? user.name.charAt(0).toUpperCase() : "U"}
                   </AvatarFallback>
                 </Avatar>
               </Button>

@@ -8,7 +8,9 @@ import { Clock } from "lucide-react";
 import { supabase } from "./lib/supabase";
 
 function AppContent() {
-  const { state } = useApp();
+  const context = useApp();
+  if (!context || !context.state) return <div className="p-10 text-center font-bold">Initialisation...</div>;
+  const { state } = context;
   
   if (state.loading) {
     return (

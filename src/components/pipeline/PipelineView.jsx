@@ -36,11 +36,11 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
   // Jump to record from global search
   useEffect(() => {
     if (jumpToId && Array.isArray(state?.pipelines) && state.pipelines.length > 0) {
-      const allDeals = state.pipelines.flatMap(p => (p.columns || []).flatMap(col => col.cards || []));
+      const allDeals = (state.pipelines || []).flatMap(p => (p.columns || []).flatMap(col => col.cards || []));
       const targetDeal = allDeals.find(d => d.id === jumpToId);
       if (targetDeal) {
         setSelectedCard(targetDeal);
-        const parentPipeline = state.pipelines.find(p => (p.columns || []).some(col => (col.cards || []).some(c => c.id === targetDeal.id)));
+        const parentPipeline = (state.pipelines || []).find(p => (p.columns || []).some(col => (col.cards || []).some(c => c.id === targetDeal.id)));
         if (parentPipeline) setActivePipelineId(parentPipeline.id);
         setIsSheetOpen(true);
         if (onJumpHandled) onJumpHandled();
@@ -137,7 +137,7 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
 
       const savedPipeline = await db.insertPipeline(newPipelineData);
       
-      dispatch({ type: "UPDATE_PIPELINES", payload: [...state.pipelines, savedPipeline] });
+      dispatch({ type: "UPDATE_PIPELINES", payload: [...(state.pipelines || []), savedPipeline] });
       setActivePipelineId(savedPipeline.id);
       setIsNewPipelineOpen(false);
       setNewPipeName("");
@@ -156,8 +156,10 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
     try {
       const dataToExport = activePipeline.columns.flatMap(col => 
         (col.cards || []).map(card => {
-          const client = state.contacts.find(c => c.id === card.contactId || c.id === card.clientId);
-          const responsible = state.users.find(u => u.id === card.responsibleId);
+          const contacts = Array.isArray(state.contacts) ? state.contacts : [];
+          const users = Array.isArray(state.users) ? state.users : [];
+          const client = contacts.find(c => c.id === card.contactId || c.id === card.clientId);
+          const responsible = users.find(u => u.id === card.responsibleId);
           return {
             Affaire: card.title,
             Étape: col.name,
@@ -195,7 +197,7 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
               <SelectContent>
                 {visiblePipelines.map(p => (
                   <SelectItem key={p.id} value={p.id} className="font-medium">
-                    {p.name} {p.ownerId === state.currentUser.id ? "(Moi)" : `(${state.users.find(u => u.id === p.ownerId)?.name})`}
+                    {p.name} {p.ownerId === state.currentUser?.id ? "(Moi)" : `(${state.users.find(u => u.id === p.ownerId)?.name || "Inconnu"})`}
                   </SelectItem>
                 ))}
                 <div className="p-2 border-t mt-1">

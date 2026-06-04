@@ -356,7 +356,7 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {state.pipelines.find(p => p.id === formData.pipelineId)?.columns.map(col => (
+                {(state.pipelines.find(p => p.id === formData.pipelineId)?.columns || []).map(col => (
                   <SelectItem key={col.id} value={col.id} className="text-xs">{col.name}</SelectItem>
                 ))}
               </SelectContent>

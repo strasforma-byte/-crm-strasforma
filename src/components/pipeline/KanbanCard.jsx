@@ -195,11 +195,11 @@ export default function KanbanCard({ card, onClick, isOverlay }) {
             <div className="flex items-center gap-1.5">
               <Avatar className="w-5 h-5 border-2 border-white shadow-sm">
                 <AvatarFallback className="text-[8px] text-white font-bold" style={{ backgroundColor: responsible?.color }}>
-                  {responsible?.name.charAt(0)}
+                  {responsible?.name ? responsible.name.charAt(0) : "?"}
                 </AvatarFallback>
               </Avatar>
               <span className="text-[10px] font-medium text-slate-600 truncate max-w-[80px]">
-                {responsible?.name}
+                {responsible?.name || "Non assigné"}
               </span>
             </div>
             <div className="font-bold text-green-600 text-xs">
@@ -210,13 +210,23 @@ export default function KanbanCard({ card, onClick, isOverlay }) {
 
         <div className="pt-2 border-t border-slate-50 flex items-center justify-between">
           <div className="flex items-center gap-1 text-[10px] text-slate-400">
-            {nextTask ? (
+            {nextTask && nextTask.date ? (
               <div className={cn("flex items-center gap-1.5", 
-                new Date(nextTask.date) < new Date() && !isToday(new Date(nextTask.date)) ? "text-red-500 font-bold" : 
-                isToday(new Date(nextTask.date)) ? "text-orange-500 font-bold" : ""
+                (() => {
+                  const d = new Date(nextTask.date);
+                  return !isNaN(d.getTime()) && d < new Date() && !isToday(d) ? "text-red-500 font-bold" : 
+                         !isNaN(d.getTime()) && isToday(d) ? "text-orange-500 font-bold" : "";
+                })()
               )}>
                 {getTaskIcon(nextTask.type)}
-                <span>{new Date(nextTask.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>
+                <span>
+                  {(() => {
+                    const d = new Date(nextTask.date);
+                    return !isNaN(d.getTime()) 
+                      ? d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+                      : "Date invalide";
+                  })()}
+                </span>
               </div>
             ) : (
               <div className="flex items-center text-amber-500">
