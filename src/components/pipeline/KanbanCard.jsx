@@ -83,13 +83,21 @@ export default function KanbanCard({ card, onClick, isOverlay }) {
     [state.users, card?.responsibleId]
   );
 
-  // Unified Task Logic: Get the earliest pending task linked to this card
+  // Unified Task Logic: Get the earliest pending task linked to this card or its contact
   const nextTask = useMemo(() => {
     if (!card?.id || !Array.isArray(state.tasks)) return null;
-    const cardTasks = state.tasks.filter(t => t.linkedCardId === card.id && t.status !== "done");
+    
+    const contactId = card.contactId || card.clientId || card.contact_id;
+    
+    // Filter tasks linked specifically to this card OR to the contact if they don't have a linkedCardId
+    const cardTasks = state.tasks.filter(t => 
+      (t.linkedCardId === card.id || (contactId && t.linkedContactId === contactId && !t.linkedCardId)) 
+      && t.status !== "done"
+    );
+    
     if (cardTasks.length === 0) return null;
     return [...cardTasks].sort((a, b) => new Date(a.date) - new Date(b.date))[0];
-  }, [state.tasks, card?.id]);
+  }, [state.tasks, card]);
 
   // Status bar logic based on nextTask
   const getStatusColor = () => {

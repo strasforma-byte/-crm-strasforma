@@ -177,7 +177,11 @@ export default function UrgencesView() {
                     allCards.filter(c => c.responsibleId === (userFilter === "all" ? currentUser.id : userFilter));
     
     return myCards.filter(card => {
-      const hasPendingTask = (state.tasks || []).some(t => t.linkedCardId === card.id && t.status !== "done");
+      const contactId = card.contactId || card.clientId || card.contact_id;
+      const hasPendingTask = (state.tasks || []).some(t => 
+        (t.linkedCardId === card.id || (contactId && t.linkedContactId === contactId && !t.linkedCardId)) 
+        && t.status !== "done"
+      );
       return !hasPendingTask;
     });
   }, [state.pipelines, state.tasks, userFilter, isAdmin, currentUser]);
@@ -434,7 +438,13 @@ export default function UrgencesView() {
 
   const TaskItem = ({ task }) => {
     const contact = state.contacts.find(c => c.id === task.linkedContactId);
-    const card = (Array.isArray(state.pipelines) ? state.pipelines : []).flatMap(p => (p.columns || []).flatMap(col => (col.cards || []))).find(c => c.id === task.linkedCardId);
+    
+    // Improved card detection: if task has no linkedCardId, try to find one via the contact
+    const allCards = (Array.isArray(state.pipelines) ? state.pipelines : []).flatMap(p => (p.columns || []).flatMap(col => (col.cards || [])));
+    const card = allCards.find(c => 
+      c.id === task.linkedCardId || (contact && !task.linkedCardId && (c.contactId === contact.id || c.clientId === contact.id))
+    );
+    
     const assignedUser = state.users.find(u => u.id === task.userId);
 
     return (
