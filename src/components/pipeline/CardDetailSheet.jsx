@@ -27,7 +27,9 @@ import {
   CheckCircle2,
   Fingerprint,
   Tag as TagIcon,
-  Loader2
+  Loader2,
+  Phone,
+  Mail
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
@@ -407,6 +409,23 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
                         </CommandList>
                       </Command>                    </PopoverContent>
                   </Popover>
+
+                  {selectedContact && (
+                    <div className="flex flex-wrap gap-x-4 gap-y-1.5 pt-1">
+                      {selectedContact.phone && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-blue-600 font-medium">
+                          <Phone className="w-3 h-3" />
+                          {selectedContact.phone}
+                        </div>
+                      )}
+                      {selectedContact.email && (
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-medium">
+                          <Mail className="w-3 h-3" />
+                          {selectedContact.email}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
