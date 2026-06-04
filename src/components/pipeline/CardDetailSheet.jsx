@@ -123,6 +123,50 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
     [state.contacts, formData.clientId]
   );
 
+  const allActivity = useMemo(() => {
+    const activities = [];
+
+    // 1. Audit History from the card itself
+    (card.history || []).forEach(h => {
+      activities.push({
+        date: new Date(h.date),
+        type: 'audit',
+        action: h.action,
+        user: state.users.find(u => u.id === h.userId)?.name || "Système"
+      });
+    });
+
+    // 2. Notes from Tasks linked to this card
+    const cardTasks = (state.tasks || []).filter(t => t.linkedCardId === card.id);
+    cardTasks.forEach(t => {
+      if (t.description || t.notes) {
+        activities.push({
+          date: new Date(t.dueDate || t.date),
+          type: 'task_note',
+          title: t.title,
+          content: t.description || t.notes,
+          status: t.status,
+          user: state.users.find(u => u.id === t.userId)?.name || "Agent"
+        });
+      }
+    });
+
+    // 3. Interactions from the Contact
+    if (selectedContact) {
+      (selectedContact.interactions || []).forEach(int => {
+        activities.push({
+          date: new Date(int.date),
+          type: 'interaction',
+          subType: int.type,
+          content: int.content,
+          user: state.users.find(u => u.id === int.userId)?.name || "Agent"
+        });
+      });
+    }
+
+    return activities.sort((a, b) => b.date - a.date);
+  }, [card.history, state.tasks, card.id, selectedContact, state.users]);
+
   if (!card) return null;
 
   const handleOpenTaskDialog = (task = null) => {
@@ -605,12 +649,59 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
 
             {/* Historique & Activité Client */}
             <div className="space-y-4 pb-4">
-              <Tabs defaultValue="history" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 bg-slate-100/50 h-9 p-1 rounded-lg">
-                  <TabsTrigger value="history" className="text-[10px] uppercase font-black tracking-widest data-[state=active]:bg-white data-[state=active]:text-green-700">Historique Affaire</TabsTrigger>
-                  <TabsTrigger value="interactions" className="text-[10px] uppercase font-black tracking-widest data-[state=active]:bg-white data-[state=active]:text-blue-700">Interactions Client</TabsTrigger>
+              <Tabs defaultValue="journal" className="w-full">
+                <TabsList className="grid w-full grid-cols-3 bg-slate-100/50 h-9 p-1 rounded-lg">
+                  <TabsTrigger value="journal" className="text-[10px] uppercase font-black tracking-widest data-[state=active]:bg-white data-[state=active]:text-indigo-700">Journal & Suivi</TabsTrigger>
+                  <TabsTrigger value="history" className="text-[10px] uppercase font-black tracking-widest data-[state=active]:bg-white data-[state=active]:text-green-700">Audit</TabsTrigger>
+                  <TabsTrigger value="interactions" className="text-[10px] uppercase font-black tracking-widest data-[state=active]:bg-white data-[state=active]:text-blue-700">Client</TabsTrigger>
                 </TabsList>
                 
+                <TabsContent value="journal" className="pt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                  {allActivity.length === 0 ? (
+                    <div className="p-8 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                      <p className="text-xs text-slate-400 italic">Aucune note ou activité enregistrée.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4 pl-4 border-l-2 border-slate-100">
+                      {allActivity.map((act, i) => (
+                        <div key={i} className="text-[11px] relative">
+                          <div className={`absolute -left-[21px] top-0.5 w-3 h-3 rounded-full border-2 border-white shadow-sm ${
+                            act.type === 'audit' ? 'bg-slate-400' : 
+                            act.type === 'task_note' ? 'bg-indigo-500' : 'bg-blue-500'
+                          }`} />
+                          
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-black text-slate-900">{format(act.date, "dd MMM yyyy HH:mm", { locale: fr })}</span>
+                            <Badge variant="ghost" className="h-4 px-1 text-[8px] uppercase font-bold opacity-60">Par {act.user}</Badge>
+                          </div>
+
+                          {act.type === 'audit' && (
+                            <p className="text-slate-600 font-medium italic">{act.action}</p>
+                          )}
+
+                          {act.type === 'task_note' && (
+                            <div className="bg-indigo-50/50 p-2 rounded-lg border border-indigo-100/50">
+                              <p className="font-bold text-indigo-700 flex items-center gap-1.5 mb-1 text-[10px] uppercase tracking-tight">
+                                <CheckSquare className="w-3 h-3" /> NOTE DE TÂCHE : {act.title}
+                              </p>
+                              <p className="text-slate-700 whitespace-pre-wrap leading-relaxed">"{act.content}"</p>
+                            </div>
+                          )}
+
+                          {act.type === 'interaction' && (
+                            <div className="bg-blue-50/50 p-2 rounded-lg border border-blue-100/50">
+                              <p className="font-bold text-blue-700 flex items-center gap-1.5 mb-1 text-[10px] uppercase tracking-tight">
+                                {act.subType === 'call' ? '📞 APPEL' : '📧 EMAIL'}
+                              </p>
+                              <p className="text-slate-700 italic">"{act.content}"</p>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </TabsContent>
+
                 <TabsContent value="history" className="pt-4 animate-in fade-in slide-in-from-top-2 duration-300">
                   <div className="space-y-3 pl-4 border-l-2 border-slate-100">
                     {(card.history || []).map((h, i) => (

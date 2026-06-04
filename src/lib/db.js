@@ -48,18 +48,22 @@ const toDbContact = (c) => ({
 })
 
 const mapCard = (card) => {
-  let cleanNotes = card.notes || "";
+  if (!card) return null;
+  let rawNotes = card.notes || "";
   let history = [];
 
-  const historyMatch = cleanNotes.match(/\[history:(.+)\]/);
+  // Extract history from all possible [history:...] tags and clean notes
+  const historyMatch = rawNotes.match(/\[history:(.+?)\]/);
   if (historyMatch) {
     try {
       history = JSON.parse(historyMatch[1]);
-      cleanNotes = cleanNotes.replace(/\[history:.+\]/, "").trim();
     } catch (e) {
       console.error("Error parsing history metadata:", e);
     }
   }
+
+  // Clean all [history:...] tags from the notes
+  const cleanNotes = rawNotes.replace(/\[history:.+?\]/g, "").trim();
 
   return {
     id: card.id,
@@ -79,7 +83,10 @@ const mapCard = (card) => {
 }
 
 const toDbCard = (card) => {
-  let notesWithMeta = card.notes || "";
+  // Always clean any existing history tags from notes before appending current history
+  let baseNotes = (card.notes || "").replace(/\[history:.+?\]/g, "").trim();
+  let notesWithMeta = baseNotes;
+  
   if (card.history && card.history.length > 0) {
     notesWithMeta += `\n[history:${JSON.stringify(card.history)}]`;
   }

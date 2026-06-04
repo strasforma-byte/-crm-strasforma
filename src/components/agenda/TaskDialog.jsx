@@ -69,6 +69,7 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
 
       setFormData({
         ...task,
+        notes: task.description || task.notes || "",
         duration: String(duration),
         date: task.date ? new Date(task.date) : (task.dueDate ? new Date(task.dueDate) : new Date()),
         linkedContactId: task.linkedContactId || "none",
