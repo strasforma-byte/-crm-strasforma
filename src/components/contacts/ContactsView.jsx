@@ -504,6 +504,20 @@ export default function ContactsView({ jumpToId, onJumpHandled }) {
     })
   };
 
+  const selectedContactDeals = useMemo(() => {
+    if (!selectedContact) return [];
+    return (Array.isArray(state.pipelines) ? state.pipelines : []).flatMap(p => 
+      (p.columns || []).flatMap(col => 
+        (col.cards || []).filter(card => card.clientId === selectedContact.id || card.contactId === selectedContact.id)
+      )
+    );
+  }, [state.pipelines, selectedContact]);
+
+  const contactDefaultCardId = useMemo(() => {
+    if (selectedContactDeals.length > 0) return selectedContactDeals[0].id;
+    return "none";
+  }, [selectedContactDeals]);
+
   return (
     <div className="h-full flex">
       {/* Sidebar for Lists */}
@@ -837,6 +851,7 @@ export default function ContactsView({ jumpToId, onJumpHandled }) {
           open={isTaskDialogOpen}
           onOpenChange={setIsTaskDialogOpen}
           defaultContactId={selectedContact?.id}
+          defaultCardId={contactDefaultCardId}
         />
 
         <Dialog open={isNewListOpen} onOpenChange={setIsNewListOpen}>

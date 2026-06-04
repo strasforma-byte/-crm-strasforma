@@ -305,9 +305,31 @@ export default function RdvProposalDialog({ open, onOpenChange, commercialId, de
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none" className="text-xs italic">Aucune</SelectItem>
-                {(Array.isArray(state.pipelines) ? state.pipelines : []).flatMap(p => (p.columns || []).flatMap(col => (col.cards || []))).map(card => (
-                  <SelectItem key={card.id} value={card.id} className="text-xs">{card.title}</SelectItem>
-                ))}
+                {(() => {
+                  const allCards = (Array.isArray(state.pipelines) ? state.pipelines : []).flatMap(p => (p.columns || []).flatMap(col => (col.cards || [])));
+                  const contactCards = formData.linkedContactId !== "none" 
+                    ? allCards.filter(c => c.clientId === formData.linkedContactId || c.contactId === formData.linkedContactId)
+                    : [];
+                  
+                  if (contactCards.length > 0) {
+                    return (
+                      <>
+                        <div className="px-2 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50">Affaires du contact</div>
+                        {contactCards.map(card => (
+                          <SelectItem key={card.id} value={card.id} className="text-xs">{card.title}</SelectItem>
+                        ))}
+                        <div className="px-2 py-1.5 text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50/50 border-t">Toutes les affaires</div>
+                        {allCards.filter(c => !contactCards.some(cc => cc.id === c.id)).map(card => (
+                          <SelectItem key={card.id} value={card.id} className="text-xs">{card.title}</SelectItem>
+                        ))}
+                      </>
+                    );
+                  }
+
+                  return allCards.map(card => (
+                    <SelectItem key={card.id} value={card.id} className="text-xs">{card.title}</SelectItem>
+                  ));
+                })()}
               </SelectContent>
             </Select>
           </div>
