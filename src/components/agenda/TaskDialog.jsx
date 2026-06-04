@@ -177,9 +177,20 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
       };
 
       if (task && task.id) {
+        // If it was a Google task (from externalEvents), we might need to convert it to a local task 
+        // if we are changing its assignee or other fields.
         const savedTask = await db.updateTask(task.id, taskData);
-        const updated = state.tasks.map(t => t.id === task.id ? savedTask : t);
-        dispatch({ type: "UPDATE_TASKS", payload: updated });
+        
+        // Update both tasks and externalEvents to ensure UI stays in sync
+        const updatedTasks = state.tasks.some(t => t.id === task.id) 
+          ? state.tasks.map(t => t.id === task.id ? savedTask : t)
+          : [...state.tasks, savedTask];
+          
+        const updatedExternal = (state.externalEvents || []).filter(t => t.id !== task.id);
+        
+        dispatch({ type: "UPDATE_TASKS", payload: updatedTasks });
+        dispatch({ type: "UPDATE_EXTERNAL_EVENTS", payload: updatedExternal });
+        
         toast.success("Action mise à jour");
       } else {
         const savedTask = await db.insertTask(taskData);
@@ -588,7 +599,6 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
               <Select 
                 value={formData.userId} 
                 onValueChange={val => setFormData({...formData, userId: val})}
-                disabled={isGoogleTask}
               >
                 <SelectTrigger className="h-9 text-xs border-slate-200 bg-slate-50/50 font-medium">
                   <div className="flex items-center gap-2">
