@@ -34,6 +34,10 @@ import { Button } from "@/components/ui/button";
 export default function KanbanBoard({ pipeline, onQuickCreate, onCardClick }) {
   const { state, dispatch, refreshAllData } = useApp();
   const { isAdmin, currentUser } = usePermissions();
+  
+  // Local state for immediate visual feedback during drag
+  const [displayPipeline, setDisplayPipeline] = useState(pipeline);
+  
   const [activeCard, setActiveCard] = useState(null);
   const [selectedCard, setSelectedCard] = useState(null);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
@@ -44,6 +48,11 @@ export default function KanbanBoard({ pipeline, onQuickCreate, onCardClick }) {
   const [reasonText, setReasonText] = useState("");
   const [pendingMove, setPendingMove] = useState(null);
   const [isSavingReason, setIsSavingReason] = useState(false);
+
+  // Keep local display in sync with prop when prop changes (from external updates)
+  React.useEffect(() => {
+    setDisplayPipeline(pipeline);
+  }, [pipeline]);
 
   const handleCardClick = (card, quickAddTask = false) => {
     if (quickAddTask) {
@@ -75,26 +84,28 @@ export default function KanbanBoard({ pipeline, onQuickCreate, onCardClick }) {
 
       const updatedDbCard = await db.updateCard(activeId, finalUpdates);
 
-      // Update local state
-      const updatedPipelines = state.pipelines.map(p => {
-        if (p.id === pipeline.id) {
-          return {
-            ...p,
-            columns: p.columns.map(col => {
-              if (col.id === activeColumn.id) return { ...col, cards: col.cards.filter(c => c.id !== activeId) };
-              if (col.id === overColumn.id) {
-                const newColCards = [...col.cards];
-                newColCards.splice(newOrder, 0, { ...updatedDbCard, columnId: updatedDbCard.columnId, contactId: updatedDbCard.contactId });
-                return { ...col, cards: newColCards };
-              }
-              return col;
-            })
-          };
-        }
-        return p;
+      // Update global state using functional update to avoid race conditions
+      dispatch({ 
+        type: "UPDATE_PIPELINES", 
+        payload: (prevPipelines) => prevPipelines.map(p => {
+          if (p.id === pipeline.id) {
+            return {
+              ...p,
+              columns: p.columns.map(col => {
+                if (col.id === activeColumn.id) return { ...col, cards: col.cards.filter(c => c.id !== activeId) };
+                if (col.id === overColumn.id) {
+                  const newColCards = [...col.cards];
+                  newColCards.splice(newOrder, 0, { ...updatedDbCard, columnId: updatedDbCard.columnId, contactId: updatedDbCard.contactId });
+                  return { ...col, cards: newColCards };
+                }
+                return col;
+              })
+            };
+          }
+          return p;
+        })
       });
 
-      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
       toast.success(`Affaire marquée comme ${overColumn.name}`);
       setIsReasonDialogOpen(false);
       setReasonText("");
@@ -117,15 +128,15 @@ export default function KanbanBoard({ pipeline, onQuickCreate, onCardClick }) {
     })
   );
 
-  const findColumnOfCard = (cardId) => {
-    return pipeline.columns.find(col => 
+  const findColumnOfCard = (cardId, currentPipeline = displayPipeline) => {
+    return currentPipeline.columns.find(col => 
       col.cards.find(card => card.id === cardId)
     );
   };
 
   const handleDragStart = (event) => {
     const { active } = event;
-    const card = pipeline.columns
+    const card = displayPipeline.columns
       .flatMap(col => col.cards)
       .find(c => c.id === active.id);
     
@@ -150,48 +161,42 @@ export default function KanbanBoard({ pipeline, onQuickCreate, onCardClick }) {
     if (activeId === overId) return;
 
     const activeColumn = findColumnOfCard(activeId);
-    const overColumn = pipeline.columns.find(col => col.id === overId) || findColumnOfCard(overId);
+    const overColumn = displayPipeline.columns.find(col => col.id === overId) || findColumnOfCard(overId);
 
     if (!activeColumn || !overColumn || activeColumn.id === overColumn.id) return;
 
-    // Move card logic for visual feedback
+    // Move card logic for visual feedback (local only)
     const activeCards = activeColumn.cards;
     const overCards = overColumn.cards;
     const activeIndex = activeCards.findIndex(c => c.id === activeId);
     const overIndex = overCards.findIndex(c => c.id === overId);
 
     let newIndex;
-    if (pipeline.columns.find(col => col.id === overId)) {
-      newIndex = overCards.length + 1;
+    if (displayPipeline.columns.find(col => col.id === overId)) {
+      newIndex = overCards.length;
     } else {
       const isBelowLastItem = over && overIndex === overCards.length - 1;
       const modifier = isBelowLastItem ? 1 : 0;
-      newIndex = overIndex >= 0 ? overIndex + modifier : overCards.length + 1;
+      newIndex = overIndex >= 0 ? overIndex + modifier : overCards.length;
     }
 
     const cardToMove = activeCards[activeIndex];
     
-    const updatedPipelines = state.pipelines.map(p => {
-      if (p.id === pipeline.id) {
-        return {
-          ...p,
-          columns: p.columns.map(col => {
-            if (col.id === activeColumn.id) {
-              return { ...col, cards: col.cards.filter(c => c.id !== activeId) };
-            }
-            if (col.id === overColumn.id) {
-              const newColCards = [...col.cards];
-              newColCards.splice(newIndex, 0, { ...cardToMove, columnId: overColumn.id });
-              return { ...col, cards: newColCards };
-            }
-            return col;
-          })
-        };
-      }
-      return p;
-    });
-
-    dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+    // Update LOCAL display pipeline for immediate feedback
+    setDisplayPipeline(prev => ({
+      ...prev,
+      columns: prev.columns.map(col => {
+        if (col.id === activeColumn.id) {
+          return { ...col, cards: col.cards.filter(c => c.id !== activeId) };
+        }
+        if (col.id === overColumn.id) {
+          const newColCards = [...col.cards];
+          newColCards.splice(newIndex, 0, { ...cardToMove, columnId: overColumn.id });
+          return { ...col, cards: newColCards };
+        }
+        return col;
+      })
+    }));
   };
 
   const handleDragEnd = async (event) => {
@@ -199,90 +204,95 @@ export default function KanbanBoard({ pipeline, onQuickCreate, onCardClick }) {
     
     if (!over) {
       setActiveCard(null);
+      setDisplayPipeline(pipeline); // Reset to true state
       return;
     }
 
     const activeId = active.id;
     const overId = over.id;
 
-    const activeColumn = findColumnOfCard(activeId);
-    const overColumn = pipeline.columns.find(col => col.id === overId) || findColumnOfCard(overId);
+    // We use displayPipeline to find where the card was dropped,
+    // but we use original pipeline to find the actual original source.
+    const originalColumn = findColumnOfCard(activeId, pipeline);
+    const targetColumn = displayPipeline.columns.find(col => col.id === overId) || findColumnOfCard(overId, displayPipeline);
 
-    if (!activeColumn || !overColumn) {
+    if (!originalColumn || !targetColumn) {
       setActiveCard(null);
+      setDisplayPipeline(pipeline);
       return;
     }
 
     try {
-      if (activeColumn.id === overColumn.id) {
-        const oldIndex = activeColumn.cards.findIndex(c => c.id === activeId);
-        const newIndex = overColumn.cards.findIndex(c => c.id === overId);
+      const movedCard = originalColumn.cards.find(c => c.id === activeId);
+      const targetCards = targetColumn.cards;
+      const newOrder = targetCards.findIndex(c => c.id === activeId);
 
-        if (oldIndex !== newIndex) {
-          const newCards = arrayMove(activeColumn.cards, oldIndex, newIndex);
-          
-          // In a real scenario, we'd update 'order' for all affected cards.
-          // For now, let's just update the moved card to ensure persistence.
-          const movedCard = activeColumn.cards[oldIndex];
-          await db.updateCard(activeId, { ...movedCard, order: newIndex });
+      if (originalColumn.id === targetColumn.id) {
+        // Reordering in same column
+        const oldIndex = originalColumn.cards.findIndex(c => c.id === activeId);
+        
+        if (oldIndex !== newOrder) {
+          await db.updateCard(activeId, { ...movedCard, order: newOrder });
 
-          const updatedPipelines = state.pipelines.map(p => {
-            if (p.id === pipeline.id) {
-              return {
-                ...p,
-                columns: p.columns.map(col => 
-                  col.id === activeColumn.id ? { ...col, cards: newCards } : col
-                )
-              };
-            }
-            return p;
+          dispatch({ 
+            type: "UPDATE_PIPELINES", 
+            payload: (prevPipelines) => prevPipelines.map(p => {
+              if (p.id === pipeline.id) {
+                return {
+                  ...p,
+                  columns: p.columns.map(col => {
+                    if (col.id === originalColumn.id) {
+                      const newCards = arrayMove(col.cards, oldIndex, newOrder);
+                      return { ...col, cards: newCards };
+                    }
+                    return col;
+                  })
+                };
+              }
+              return p;
+            })
           });
-          dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
         }
       } else {
         // Moved to a different column
-        const movedCard = activeColumn.cards.find(c => c.id === activeId);
-        const targetCards = overColumn.cards;
-        const overIndex = targetCards.findIndex(c => c.id === overId);
-        
-        let newOrder = overIndex >= 0 ? overIndex : targetCards.length;
-
         // Sales Intelligence: Prompt for reason if won/lost
-        const colName = overColumn.name.toLowerCase();
+        const colName = targetColumn.name.toLowerCase();
         const isFinalState = colName.includes("gagné") || colName.includes("perdu") || colName.includes("won") || colName.includes("lost");
 
         if (isFinalState) {
-          setPendingMove({ activeId, movedCard, overColumn, newOrder, activeColumn });
+          setPendingMove({ activeId, movedCard, overColumn: targetColumn, newOrder, activeColumn: originalColumn });
           setIsReasonDialogOpen(true);
         } else {
           // Standard Move
-          const updatedDbCard = await db.updateCard(activeId, { ...movedCard, columnId: overColumn.id, order: newOrder });
+          const updatedDbCard = await db.updateCard(activeId, { ...movedCard, columnId: targetColumn.id, order: newOrder });
 
-          const updatedPipelines = state.pipelines.map(p => {
-            if (p.id === pipeline.id) {
-              return {
-                ...p,
-                columns: p.columns.map(col => {
-                  if (col.id === activeColumn.id) return { ...col, cards: col.cards.filter(c => c.id !== activeId) };
-                  if (col.id === overColumn.id) {
-                    const newColCards = [...col.cards];
-                    newColCards.splice(newOrder, 0, { ...updatedDbCard, columnId: updatedDbCard.columnId, contactId: updatedDbCard.contactId });
-                    return { ...col, cards: newColCards };
-                  }
-                  return col;
-                })
-              };
-            }
-            return p;
+          dispatch({ 
+            type: "UPDATE_PIPELINES", 
+            payload: (prevPipelines) => prevPipelines.map(p => {
+              if (p.id === pipeline.id) {
+                return {
+                  ...p,
+                  columns: p.columns.map(col => {
+                    if (col.id === originalColumn.id) return { ...col, cards: col.cards.filter(c => c.id !== activeId) };
+                    if (col.id === targetColumn.id) {
+                      const newColCards = [...col.cards];
+                      newColCards.splice(newOrder, 0, { ...updatedDbCard, columnId: updatedDbCard.columnId, contactId: updatedDbCard.contactId });
+                      return { ...col, cards: newColCards };
+                    }
+                    return col;
+                  })
+                };
+              }
+              return p;
+            })
           });
-          dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
-          toast.success(`Affaire déplacée vers ${overColumn.name}`);
+          toast.success(`Affaire déplacée vers ${targetColumn.name}`);
         }
       }
     } catch (error) {
       console.error("Error moving card:", error);
       toast.error("Erreur lors du déplacement");
-      // Optionally reload data to revert UI
+      setDisplayPipeline(pipeline);
       refreshAllData();
     }
 
@@ -309,7 +319,7 @@ export default function KanbanBoard({ pipeline, onQuickCreate, onCardClick }) {
         onDragEnd={handleDragEnd}
       >
         <div className="flex gap-6 h-full min-w-max pb-4">
-          {(pipeline.columns || []).map((column) => (
+          {(displayPipeline.columns || []).map((column) => (
             <KanbanColumn 
               key={column.id} 
               column={column} 

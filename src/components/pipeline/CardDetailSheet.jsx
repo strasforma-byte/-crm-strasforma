@@ -145,21 +145,22 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
 
       await db.updateCard(card.id, updatedCard);
       
-      const updatedPipelines = state.pipelines.map(p => {
-        const hasCard = p.columns.some(col => col.cards.some(c => c.id === card.id));
-        if (hasCard) {
-          return {
-            ...p,
-            columns: p.columns.map(col => ({
-              ...col,
-              cards: col.cards.map(c => c.id === card.id ? { ...c, history: updatedCard.history, notes: "" } : c)
-            }))
-          };
-        }
-        return p;
+      dispatch({ 
+        type: "UPDATE_PIPELINES", 
+        payload: (prev) => prev.map(p => {
+          const hasCard = p.columns.some(col => col.cards.some(c => c.id === card.id));
+          if (hasCard) {
+            return {
+              ...p,
+              columns: p.columns.map(col => ({
+                ...col,
+                cards: col.cards.map(c => c.id === card.id ? { ...c, history: updatedCard.history, notes: "" } : c)
+              }))
+            };
+          }
+          return p;
+        })
       });
-
-      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
       setFormData({ ...formData, notes: "" });
       toast.success("Note ajoutée à l'historique");
     } catch (error) {
@@ -283,7 +284,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
         throw new Error("La création a échoué (réponse vide)");
       }
 
-      dispatch({ type: "UPDATE_CONTACTS", payload: [...contacts, savedContact] });
+      dispatch({ type: "UPDATE_CONTACTS", payload: (prev) => [...prev, savedContact] });
       setFormData(prev => ({ ...prev, clientId: savedContact.id }));
       setIsQuickContactOpen(false);
       setQuickContact({ firstName: "", lastName: "", company: "", email: "", phone: "", siret: "" });
@@ -360,7 +361,52 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
         return p;
       });
 
-      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+      dispatch({ 
+        type: "UPDATE_PIPELINES", 
+        payload: (prev) => prev.map(p => {
+          // Source Pipeline (the one the card was in)
+          if (p.id === pipeline.id) {
+            const newColumns = p.columns.map(col => ({
+              ...col,
+              cards: (col.cards || []).filter(c => c.id !== card.id)
+            }));
+            
+            // If still in the same pipeline
+            if (p.id === formData.pipelineId) {
+              return {
+                ...p,
+                columns: newColumns.map(col => {
+                  if (col.id === formData.columnId) {
+                    const isUpdate = (col.cards || []).find(c => c.id === card.id);
+                    if (isUpdate) {
+                      return { ...col, cards: col.cards.map(c => c.id === card.id ? updatedCard : c) };
+                    } else {
+                      return { ...col, cards: [...(col.cards || []), updatedCard] };
+                    }
+                  }
+                  return col;
+                })
+              };
+            }
+            return { ...p, columns: newColumns };
+          }
+
+          // Target Pipeline (if different from source)
+          if (p.id === formData.pipelineId && pipeline.id !== formData.pipelineId) {
+            return {
+              ...p,
+              columns: p.columns.map(col => {
+                if (col.id === formData.columnId) {
+                  return { ...col, cards: [...(col.cards || []), updatedCard] };
+                }
+                return col;
+              })
+            };
+          }
+
+          return p;
+        })
+      });
       toast.success("Affaire mise à jour");
       onOpenChange(false);
     } catch (error) {
@@ -398,19 +444,21 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
     try {
       await db.deleteCard(card.id);
       
-      const updatedPipelines = state.pipelines.map(p => {
-        if (p.id === pipeline.id) {
-          return {
-            ...p,
-            columns: p.columns.map(col => ({
-              ...col,
-              cards: (col.cards || []).filter(c => c.id !== card.id)
-            }))
-          };
-        }
-        return p;
+      dispatch({ 
+        type: "UPDATE_PIPELINES", 
+        payload: (prev) => prev.map(p => {
+          if (p.id === pipeline.id) {
+            return {
+              ...p,
+              columns: p.columns.map(col => ({
+                ...col,
+                cards: (col.cards || []).filter(c => c.id !== card.id)
+              }))
+            };
+          }
+          return p;
+        })
       });
-      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
       toast.success("Affaire supprimée");
       onOpenChange(false);
     } catch (error) {

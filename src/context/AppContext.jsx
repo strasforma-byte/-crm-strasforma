@@ -30,9 +30,9 @@ function appReducer(state, action) {
     case "UPDATE_USERS":
       return { ...state, users: action.payload };
     case "UPDATE_PIPELINES":
-      return { ...state, pipelines: action.payload };
+      return { ...state, pipelines: typeof action.payload === 'function' ? action.payload(state.pipelines) : action.payload };
     case "UPDATE_CONTACTS":
-      return { ...state, contacts: action.payload };
+      return { ...state, contacts: typeof action.payload === 'function' ? action.payload(state.contacts) : action.payload };
     case "UPDATE_CONTACT_LISTS":
       return { ...state, contactLists: action.payload };
     case "UPDATE_TASKS":

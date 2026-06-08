@@ -137,7 +137,7 @@ export default function PipelineView({ jumpToId, onJumpHandled }) {
 
       const savedPipeline = await db.insertPipeline(newPipelineData);
       
-      dispatch({ type: "UPDATE_PIPELINES", payload: [...(state.pipelines || []), savedPipeline] });
+      dispatch({ type: "UPDATE_PIPELINES", payload: (prev) => [...(prev || []), savedPipeline] });
       setActivePipelineId(savedPipeline.id);
       setIsNewPipelineOpen(false);
       setNewPipeName("");

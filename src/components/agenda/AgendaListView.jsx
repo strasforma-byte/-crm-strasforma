@@ -36,14 +36,16 @@ export default function AgendaListView({ baseDate, tasks, proposals, onTaskClick
             const updatedCard = { ...card, history: [historyEntry, ...(card.history || [])] };
             await db.updateCard(card.id, updatedCard);
             
-            const updatedPipelines = state.pipelines.map(p => p.id === pipeline.id ? {
-              ...p,
-              columns: p.columns.map(col => ({
-                ...col,
-                cards: col.cards.map(c => c.id === card.id ? updatedCard : c)
-              }))
-            } : p);
-            dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+            dispatch({ 
+              type: "UPDATE_PIPELINES", 
+              payload: (prev) => prev.map(p => p.id === pipeline.id ? {
+                ...p,
+                columns: p.columns.map(col => ({
+                  ...col,
+                  cards: col.cards.map(c => c.id === card.id ? updatedCard : c)
+                }))
+              } : p)
+            });
           }
         }
       }
@@ -79,14 +81,16 @@ export default function AgendaListView({ baseDate, tasks, proposals, onTaskClick
             const updatedCard = { ...card, history: [historyEntry, ...(card.history || [])] };
             await db.updateCard(card.id, updatedCard);
             
-            const updatedPipelines = state.pipelines.map(p => p.id === pipeline.id ? {
-              ...p,
-              columns: p.columns.map(col => ({
-                ...col,
-                cards: col.cards.map(c => c.id === card.id ? updatedCard : c)
-              }))
-            } : p);
-            dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+            dispatch({ 
+              type: "UPDATE_PIPELINES", 
+              payload: (prev) => prev.map(p => p.id === pipeline.id ? {
+                ...p,
+                columns: p.columns.map(col => ({
+                  ...col,
+                  cards: col.cards.map(c => c.id === card.id ? updatedCard : c)
+                }))
+              } : p)
+            });
           }
         }
       }

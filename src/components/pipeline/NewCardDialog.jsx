@@ -145,8 +145,8 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
         throw new Error("La création a échoué (réponse vide)");
       }
 
-      // Use latest state to avoid losing other newly created contacts in rapid succession
-      dispatch({ type: "UPDATE_CONTACTS", payload: [...contacts, savedContact] });
+      // Use functional update to avoid losing other newly created contacts in rapid succession
+      dispatch({ type: "UPDATE_CONTACTS", payload: (prev) => [...prev, savedContact] });
       
       setFormData(prev => ({ ...prev, clientId: savedContact.id }));
       setIsQuickContactOpen(false);
@@ -193,32 +193,35 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
 
       const savedCard = await db.insertCard(newCardData);
       
-      const updatedPipelines = state.pipelines.map(p => {
-        if (p.id === formData.pipelineId) {
-          return {
-            ...p,
-            columns: p.columns.map(col => {
-              if (col.id === formData.columnId) {
-                const updatedCol = { ...col, cards: [...(col.cards || []), {
-                  id: savedCard.id,
-                  title: savedCard.title,
-                  value: savedCard.value,
-                  fundingSource: savedCard.fundingSource,
-                  priority: savedCard.priority,
-                  tags: savedCard.tags || [],
-                  order: savedCard.order,
-                  contactId: savedCard.contactId
-                }] };
-                return updatedCol;
-              }
-              return col;
-            })
-          };
-        }
-        return p;
+      dispatch({ 
+        type: "UPDATE_PIPELINES", 
+        payload: (prev) => prev.map(p => {
+          if (p.id === formData.pipelineId) {
+            return {
+              ...p,
+              columns: p.columns.map(col => {
+                if (col.id === formData.columnId) {
+                  return { 
+                    ...col, 
+                    cards: [...(col.cards || []), {
+                      id: savedCard.id,
+                      title: savedCard.title,
+                      value: savedCard.value,
+                      fundingSource: savedCard.fundingSource,
+                      priority: savedCard.priority,
+                      tags: savedCard.tags || [],
+                      order: savedCard.order,
+                      contactId: savedCard.contactId
+                    }] 
+                  };
+                }
+                return col;
+              })
+            };
+          }
+          return p;
+        })
       });
-
-      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
       toast.success("Affaire créée avec succès");
       onOpenChange(false);
     } catch (error) {

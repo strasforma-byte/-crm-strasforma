@@ -53,13 +53,15 @@ export default function EditPipelineDialog({ open, onOpenChange, pipeline }) {
       setColumns([...columns, { ...savedCol, cards: [] }]);
       
       // Update global state too
-      const updatedPipelines = state.pipelines.map(p => {
-        if (p.id === pipeline.id) {
-          return { ...p, columns: [...p.columns, { ...savedCol, cards: [] }] };
-        }
-        return p;
+      dispatch({ 
+        type: "UPDATE_PIPELINES", 
+        payload: (prev) => prev.map(p => {
+          if (p.id === pipeline.id) {
+            return { ...p, columns: [...p.columns, { ...savedCol, cards: [] }] };
+          }
+          return p;
+        })
       });
-      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
     } catch (error) {
       toast.error("Erreur lors de l'ajout de l'étape");
     }
@@ -77,13 +79,15 @@ export default function EditPipelineDialog({ open, onOpenChange, pipeline }) {
       setColumns(columns.filter(c => c.id !== id));
       
       // Update global state
-      const updatedPipelines = state.pipelines.map(p => {
-        if (p.id === pipeline.id) {
-          return { ...p, columns: p.columns.filter(c => c.id !== id) };
-        }
-        return p;
+      dispatch({ 
+        type: "UPDATE_PIPELINES", 
+        payload: (prev) => prev.map(p => {
+          if (p.id === pipeline.id) {
+            return { ...p, columns: p.columns.filter(c => c.id !== id) };
+          }
+          return p;
+        })
       });
-      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
     } catch (error) {
       toast.error("Erreur lors de la suppression de l'étape");
     }
@@ -97,16 +101,18 @@ export default function EditPipelineDialog({ open, onOpenChange, pipeline }) {
       await db.updateColumn(id, { name: newName });
       
       // Update global state
-      const updatedPipelines = state.pipelines.map(p => {
-        if (p.id === pipeline.id) {
-          return {
-            ...p,
-            columns: p.columns.map(c => c.id === id ? { ...c, name: newName } : c)
-          };
-        }
-        return p;
+      dispatch({ 
+        type: "UPDATE_PIPELINES", 
+        payload: (prev) => prev.map(p => {
+          if (p.id === pipeline.id) {
+            return {
+              ...p,
+              columns: p.columns.map(c => c.id === id ? { ...c, name: newName } : c)
+            };
+          }
+          return p;
+        })
       });
-      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
     } catch (error) {
       toast.error("Erreur lors de la mise à jour de l'étape");
     }
@@ -125,11 +131,12 @@ export default function EditPipelineDialog({ open, onOpenChange, pipeline }) {
         visibility: pipeline.visibility // Keep existing visibility or add a toggle
       });
 
-      const updatedPipelines = state.pipelines.map(p => 
-        p.id === pipeline.id ? { ...p, ...updatedPipeline } : p
-      );
-
-      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+      dispatch({ 
+        type: "UPDATE_PIPELINES", 
+        payload: (prev) => prev.map(p => 
+          p.id === pipeline.id ? { ...p, ...updatedPipeline } : p
+        )
+      });
       toast.success("Pipeline mis à jour avec succès");
       onOpenChange(false);
     } catch (error) {
@@ -151,8 +158,10 @@ export default function EditPipelineDialog({ open, onOpenChange, pipeline }) {
     try {
       await db.deletePipeline(pipeline.id);
       
-      const updatedPipelines = state.pipelines.filter(p => p.id !== pipeline.id);
-      dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+      dispatch({ 
+        type: "UPDATE_PIPELINES", 
+        payload: (prev) => prev.filter(p => p.id !== pipeline.id)
+      });
       
       toast.success("Pipeline supprimé avec succès");
       onOpenChange(false);

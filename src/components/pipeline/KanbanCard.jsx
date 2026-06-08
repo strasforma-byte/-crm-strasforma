@@ -126,13 +126,16 @@ export default function KanbanCard({ card, onClick, isOverlay }) {
   const handleDelete = async (e) => {
     try {
       await db.deleteCard(card.id);
-      dispatch({ type: "UPDATE_PIPELINES", payload: state.pipelines.map(p => ({
-        ...p,
-        columns: p.columns.map(col => ({
-          ...col,
-          cards: col.cards.filter(c => c.id !== card.id)
+      dispatch({ 
+        type: "UPDATE_PIPELINES", 
+        payload: (prev) => prev.map(p => ({
+          ...p,
+          columns: p.columns.map(col => ({
+            ...col,
+            cards: col.cards.filter(c => c.id !== card.id)
+          }))
         }))
-      }))});
+      });
       toast.success("Affaire supprimée");
     } catch (error) {
       console.error("Error deleting card:", error);
