@@ -120,6 +120,17 @@ export default function UrgencesView() {
     .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00")),
   [activeTasks, today]);
 
+  const pendingProposals = useMemo(() => {
+    const allProposals = Array.isArray(state.rdvProposals) ? state.rdvProposals : [];
+    let props = allProposals.filter(p => p.status === "pending");
+    if (!isAdmin) {
+      props = props.filter(p => p.commercialId === currentUser.id);
+    } else if (userFilter !== "all") {
+      props = props.filter(p => p.commercialId === userFilter);
+    }
+    return props;
+  }, [state.rdvProposals, userFilter, isAdmin, currentUser]);
+
   // Sort pending proposals chronologically
   const sortedPendingProposals = useMemo(() => [...pendingProposals]
     .sort((a, b) => new Date(a.proposedDate) - new Date(b.proposedDate)),
@@ -533,7 +544,7 @@ export default function UrgencesView() {
   };
 
   const lateCount = lateTasks.length;
-  const totalCount = lateCount + todayTasks.length + tomorrowTasks.length + pendingProposals.length;
+  const totalCount = lateCount + todayTasks.length + tomorrowTasks.length + sortedPendingProposals.length;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -645,7 +656,7 @@ export default function UrgencesView() {
         </Collapsible>
 
         {/* PROPOSITIONS EN ATTENTE */}
-        {pendingProposals.length > 0 && (
+        {sortedPendingProposals.length > 0 && (
           <Collapsible open={openSections.proposals} onOpenChange={() => toggleSection('proposals')} className="space-y-2">
             <CollapsibleTrigger asChild>
               <div className="flex items-center justify-between p-3 bg-amber-50 rounded-lg cursor-pointer hover:bg-amber-100 transition-colors border border-amber-100">
@@ -654,13 +665,13 @@ export default function UrgencesView() {
                     <Handshake className="w-4 h-4" />
                   </div>
                   <h3 className="font-bold text-amber-900">Propositions en attente</h3>
-                  <Badge className="bg-amber-200 text-amber-700 border-none">{pendingProposals.length}</Badge>
+                  <Badge className="bg-amber-200 text-amber-700 border-none">{sortedPendingProposals.length}</Badge>
                 </div>
                 {openSections.proposals ? <ChevronDown className="w-5 h-5 text-amber-400" /> : <ChevronRight className="w-5 h-5 text-amber-400" />}
               </div>
             </CollapsibleTrigger>
             <CollapsibleContent className="space-y-2 pt-2 pl-4">
-              {pendingProposals.map(prop => <ProposalItem key={prop.id} proposal={prop} />)}
+              {sortedPendingProposals.map(prop => <ProposalItem key={prop.id} proposal={prop} />)}
             </CollapsibleContent>
           </Collapsible>
         )}
