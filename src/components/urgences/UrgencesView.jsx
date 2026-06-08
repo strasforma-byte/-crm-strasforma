@@ -150,7 +150,7 @@ export default function UrgencesView() {
             <Badge className="bg-amber-400 text-amber-900 text-[10px] uppercase font-bold border-none">À valider</Badge>
           </div>
           <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-600">
-            <span className="font-medium text-amber-700">Proposé par {prospector?.name}</span>
+            <span className="font-medium text-amber-700">Le {format(new Date(proposal.proposedDate), "dd/MM", { locale: fr })} à {format(new Date(proposal.proposedDate), "HH:mm")} par {prospector?.name}</span>
             {contact && (
               <span className="flex items-center gap-1">
                 <UserIcon className="w-3 h-3" /> {contact.firstName} {contact.lastName}
@@ -467,7 +467,12 @@ export default function UrgencesView() {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p className="font-bold text-sm truncate">{task.title}</p>
-            <Badge variant="outline" className="text-[10px] uppercase font-bold px-1.5 h-4">{task.time}</Badge>
+            <div className="flex items-center gap-1">
+              <Badge variant="outline" className="text-[10px] uppercase font-bold px-1.5 h-4 bg-slate-100 border-slate-200">
+                {format(new Date(task.date), "dd/MM", { locale: fr })}
+              </Badge>
+              <Badge variant="outline" className="text-[10px] uppercase font-bold px-1.5 h-4">{task.time}</Badge>
+            </div>
           </div>
           <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500">
             {contact && (
