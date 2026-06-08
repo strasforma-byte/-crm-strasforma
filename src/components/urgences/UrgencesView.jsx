@@ -105,27 +105,34 @@ export default function UrgencesView() {
   const activeTasks = useMemo(() => filteredTasks.filter(t => t.status !== "done"), [filteredTasks]);
   const doneTasks = useMemo(() => filteredTasks.filter(t => t.status === "done"), [filteredTasks]);
 
-  const lateTasks = activeTasks.filter(t => new Date(t.date) < today);
-  const todayTasks = activeTasks.filter(t => isSameDay(new Date(t.date), today));
-  const tomorrowTasks = activeTasks.filter(t => isSameDay(new Date(t.date), addDays(today, 1)));
+  const lateTasks = useMemo(() => activeTasks
+    .filter(t => new Date(t.date) < today)
+    .sort((a, b) => new Date(a.dueDate || a.date) - new Date(b.dueDate || b.date)), 
+  [activeTasks, today]);
+
+  const todayTasks = useMemo(() => activeTasks
+    .filter(t => isSameDay(new Date(t.date), today))
+    .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00")),
+  [activeTasks, today]);
+
+  const tomorrowTasks = useMemo(() => activeTasks
+    .filter(t => isSameDay(new Date(t.date), addDays(today, 1)))
+    .sort((a, b) => (a.time || "00:00").localeCompare(b.time || "00:00")),
+  [activeTasks, today]);
+
+  // Sort pending proposals chronologically
+  const sortedPendingProposals = useMemo(() => [...pendingProposals]
+    .sort((a, b) => new Date(a.proposedDate) - new Date(b.proposedDate)),
+  [pendingProposals]);
 
   // Progress calculation: Based on tasks due up to today
-  const tasksDueUpToToday = filteredTasks.filter(t => new Date(t.date) <= today);
-  const completedTasksDueUpToToday = tasksDueUpToToday.filter(t => t.status === "done");
-  const progressRate = tasksDueUpToToday.length > 0 
-    ? Math.round((completedTasksDueUpToToday.length / tasksDueUpToToday.length) * 100) 
-    : 100;
-
-  const pendingProposals = useMemo(() => {
-    const allProposals = Array.isArray(state.rdvProposals) ? state.rdvProposals : [];
-    let props = allProposals.filter(p => p.status === "pending");
-    if (!isAdmin) {
-      props = props.filter(p => p.commercialId === currentUser.id);
-    } else if (userFilter !== "all") {
-      props = props.filter(p => p.commercialId === userFilter);
-    }
-    return props;
-  }, [state.rdvProposals, userFilter, isAdmin, currentUser]);
+  const progressRate = useMemo(() => {
+    const tasksDueUpToToday = filteredTasks.filter(t => new Date(t.date) <= today);
+    const completedTasksDueUpToToday = tasksDueUpToToday.filter(t => t.status === "done");
+    return tasksDueUpToToday.length > 0 
+      ? Math.round((completedTasksDueUpToToday.length / tasksDueUpToToday.length) * 100) 
+      : 100;
+  }, [filteredTasks, today]);
 
   const ProposalItem = ({ proposal }) => {
     const users = Array.isArray(state.users) ? state.users : [];
@@ -136,21 +143,25 @@ export default function UrgencesView() {
     const contact = contacts.find(c => c.id === proposal.linkedContactId);
     const card = pipelines.flatMap(p => (p.columns || []).flatMap(col => (col.cards || []))).find(c => c.id === proposal.linkedCardId);
 
+    const propDate = new Date(proposal.proposedDate);
+
     return (
       <Card 
         className="p-4 flex items-center gap-4 hover:shadow-md transition-shadow group cursor-pointer border-l-4 border-l-amber-500 bg-amber-50/20"
         onClick={() => { setSelectedProposal(proposal); setIsProposalSheetOpen(true); }}
       >
-        <div className="shrink-0 p-2 bg-white rounded-lg border border-amber-200">
-          <Handshake className="w-5 h-5 text-amber-600" />
+        <div className="flex flex-col items-center justify-center min-w-[60px] h-[60px] bg-white rounded-lg border border-amber-200 shadow-sm shrink-0">
+          <span className="text-[10px] font-black uppercase text-amber-600 leading-none mb-1">{format(propDate, "MMM", { locale: fr })}</span>
+          <span className="text-xl font-black text-slate-900 leading-none">{format(propDate, "dd")}</span>
+          <span className="text-[10px] font-bold text-slate-400 mt-1">{format(propDate, "HH:mm")}</span>
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <p className="font-bold text-sm text-slate-900 truncate">{proposal.title}</p>
             <Badge className="bg-amber-400 text-amber-900 text-[10px] uppercase font-bold border-none">À valider</Badge>
           </div>
-          <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-600">
-            <span className="font-medium text-amber-700">Le {format(new Date(proposal.proposedDate), "dd/MM", { locale: fr })} à {format(new Date(proposal.proposedDate), "HH:mm")} par {prospector?.name}</span>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11px] text-slate-600">
+            <span className="font-medium text-amber-700">Par {prospector?.name}</span>
             {contact && (
               <span className="flex items-center gap-1">
                 <UserIcon className="w-3 h-3" /> {contact.firstName} {contact.lastName}
@@ -448,33 +459,34 @@ export default function UrgencesView() {
     
     const contact = contacts.find(c => c.id === task.linkedContactId);
     
-    // Improved card detection: if task has no linkedCardId, try to find one via the contact
+    // Improved card detection
     const allCards = pipelines.flatMap(p => (p.columns || []).flatMap(col => (col.cards || [])));
     const card = allCards.find(c => 
       c.id === task.linkedCardId || (contact && !task.linkedCardId && (c.contactId === contact.id || c.clientId === contact.id))
     );
     
     const assignedUser = users.find(u => u.id === task.userId);
+    const taskDate = new Date(task.date);
 
     return (
       <Card 
         className="p-4 flex items-center gap-4 hover:shadow-md transition-shadow group cursor-pointer"
         onClick={() => handleTaskClick(task)}
       >
-        <div className="shrink-0 p-2 bg-slate-50 rounded-lg">
-          {getTaskIcon(task.type)}
+        <div className="flex flex-col items-center justify-center min-w-[60px] h-[60px] bg-slate-50 rounded-lg border border-slate-200 shadow-sm shrink-0">
+          <span className="text-[10px] font-black uppercase text-slate-500 leading-none mb-1">{format(taskDate, "MMM", { locale: fr })}</span>
+          <span className="text-xl font-black text-slate-900 leading-none">{format(taskDate, "dd")}</span>
+          <span className="text-[10px] font-bold text-slate-400 mt-1">{task.time}</span>
         </div>
+        
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
-            <p className="font-bold text-sm truncate">{task.title}</p>
-            <div className="flex items-center gap-1">
-              <Badge variant="outline" className="text-[10px] uppercase font-bold px-1.5 h-4 bg-slate-100 border-slate-200">
-                {format(new Date(task.date), "dd/MM", { locale: fr })}
-              </Badge>
-              <Badge variant="outline" className="text-[10px] uppercase font-bold px-1.5 h-4">{task.time}</Badge>
+            <div className="shrink-0">
+              {getTaskIcon(task.type)}
             </div>
+            <p className="font-bold text-sm truncate">{task.title}</p>
           </div>
-          <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11px] text-slate-500">
             {contact && (
               <HoverCard>
                 <HoverCardTrigger asChild>
