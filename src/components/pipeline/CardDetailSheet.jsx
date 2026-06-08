@@ -143,7 +143,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
         notes: ""
       };
 
-      await db.updateCard(card.id, updatedCard);
+      const savedCard = await db.updateCard(card.id, updatedCard);
       
       dispatch({ 
         type: "UPDATE_PIPELINES", 
@@ -154,7 +154,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
               ...p,
               columns: p.columns.map(col => ({
                 ...col,
-                cards: col.cards.map(c => c.id === card.id ? { ...c, history: updatedCard.history, notes: "" } : c)
+                cards: col.cards.map(c => c.id === card.id ? savedCard : c)
               }))
             };
           }
@@ -231,7 +231,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
       console.error("Error in allActivity memo:", error);
       return [];
     }
-  }, [card?.history, state.tasks, card?.id, selectedContact, state.users]);
+  }, [card, state.tasks, selectedContact, state.users]);
 
   if (!card) return null;
 
