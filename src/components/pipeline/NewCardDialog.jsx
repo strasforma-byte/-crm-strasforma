@@ -203,16 +203,7 @@ export default function NewCardDialog({ open, onOpenChange, defaultPipelineId, d
                 if (col.id === formData.columnId) {
                   return { 
                     ...col, 
-                    cards: [...(col.cards || []), {
-                      id: savedCard.id,
-                      title: savedCard.title,
-                      value: savedCard.value,
-                      fundingSource: savedCard.fundingSource,
-                      priority: savedCard.priority,
-                      tags: savedCard.tags || [],
-                      order: savedCard.order,
-                      contactId: savedCard.contactId
-                    }] 
+                    cards: [...(col.cards || []), savedCard] 
                   };
                 }
                 return col;

@@ -365,47 +365,27 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
       dispatch({ 
         type: "UPDATE_PIPELINES", 
         payload: (prev) => prev.map(p => {
-          // Source Pipeline (the one the card was in)
-          if (p.id === pipeline.id) {
-            const newColumns = p.columns.map(col => ({
-              ...col,
-              cards: (col.cards || []).filter(c => c.id !== card.id)
-            }));
-            
-            // If still in the same pipeline
-            if (p.id === formData.pipelineId) {
-              return {
-                ...p,
-                columns: newColumns.map(col => {
-                  if (col.id === formData.columnId) {
-                    const isUpdate = (col.cards || []).find(c => c.id === card.id);
-                    if (isUpdate) {
-                      return { ...col, cards: col.cards.map(c => c.id === card.id ? updatedCard : c) };
-                    } else {
-                      return { ...col, cards: [...(col.cards || []), updatedCard] };
-                    }
-                  }
-                  return col;
-                })
-              };
-            }
-            return { ...p, columns: newColumns };
-          }
+          // 1. Remove the card from its old position (wherever it was)
+          const newColumns = p.columns.map(col => ({
+            ...col,
+            cards: col.cards.filter(c => c.id !== card.id)
+          }));
 
-          // Target Pipeline (if different from source)
-          if (p.id === formData.pipelineId && pipeline.id !== formData.pipelineId) {
+          // 2. If this is the target pipeline, add the card to the target column
+          if (p.id === formData.pipelineId) {
             return {
               ...p,
-              columns: p.columns.map(col => {
+              columns: newColumns.map(col => {
                 if (col.id === formData.columnId) {
-                  return { ...col, cards: [...(col.cards || []), updatedCard] };
+                  return { ...col, cards: [...col.cards, savedCard] };
                 }
                 return col;
               })
             };
           }
 
-          return p;
+          // 3. Otherwise, just return the pipeline without the card (in case it was there)
+          return { ...p, columns: newColumns };
         })
       });
       toast.success("Affaire mise à jour");
