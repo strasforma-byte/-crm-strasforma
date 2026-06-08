@@ -83,6 +83,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
   const [selectedTask, setSelectedTask] = useState(null);
 
   const [isSaving, setIsSaving] = useState(false);
+  const [tempFollowUpNote, setTempFollowUpNote] = useState("");
 
   const filteredContactsForSearch = useMemo(() => {
     const contacts = Array.isArray(state.contacts) ? state.contacts : [];
@@ -125,22 +126,21 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
   );
 
   const handleLogNote = async () => {
-    if (!formData.notes.trim()) return;
+    if (!tempFollowUpNote.trim()) return;
     
     try {
       const now = new Date().toISOString();
       const newEntry = {
         date: now,
         userId: state.currentUser.id,
-        action: `Note ajoutée : ${formData.notes.trim()}`,
+        action: `Note ajoutée : ${tempFollowUpNote.trim()}`,
         type: 'internal_note',
-        content: formData.notes.trim()
+        content: tempFollowUpNote.trim()
       };
 
       const updatedCard = {
         ...card,
-        history: [newEntry, ...(card.history || [])],
-        notes: ""
+        history: [newEntry, ...(card.history || [])]
       };
 
       const savedCard = await db.updateCard(card.id, updatedCard);
@@ -161,9 +161,10 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
           return p;
         })
       });
-      setFormData({ ...formData, notes: "" });
-      toast.success("Note ajoutée à l'historique");
+      setTempFollowUpNote("");
+      toast.success("Note ajoutée au journal de suivi");
     } catch (error) {
+      console.error("Error logging note:", error);
       toast.error("Erreur lors de l'ajout de la note");
     }
   };
@@ -649,6 +650,15 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="space-y-1.5 col-span-2">
+                    <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Notes Générales / Description</Label>
+                    <Textarea 
+                      placeholder="Informations permanentes sur cette affaire..." 
+                      className="min-h-[60px] bg-slate-50/50 text-xs border-slate-100 focus:bg-white transition-colors"
+                      value={formData.notes}
+                      onChange={e => setFormData({...formData, notes: e.target.value})}
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -756,7 +766,7 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
                   size="sm" 
                   className="h-6 text-[9px] font-black text-blue-600 hover:text-blue-700 hover:bg-blue-50"
                   onClick={handleLogNote}
-                  disabled={!formData.notes.trim()}
+                  disabled={!tempFollowUpNote.trim()}
                 >
                   <StickyNote className="w-3 h-3 mr-1" /> ENREGISTRER LA NOTE
                 </Button>
@@ -764,8 +774,8 @@ export default function CardDetailSheet({ card, pipeline, open, onOpenChange }) 
               <Textarea 
                 placeholder="Écrivez un commentaire ou une note ici..." 
                 className="min-h-[80px] bg-slate-50/50 text-xs border-slate-100 focus:bg-white transition-colors"
-                value={formData.notes}
-                onChange={e => setFormData({...formData, notes: e.target.value})}
+                value={tempFollowUpNote}
+                onChange={e => setTempFollowUpNote(e.target.value)}
               />
               <p className="text-[9px] text-slate-400 italic">La note sera archivée chronologiquement dans le journal ci-dessous.</p>
             </div>

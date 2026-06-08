@@ -53,8 +53,9 @@ const mapCard = (card) => {
   let history = [];
 
   try {
-    // Extract history from all possible [history:...] tags and clean notes
-    const historyMatch = rawNotes.match(/\[history:(.+?)\]/);
+    // Extract history from [history:...] tag. We use a more robust approach to handle nested brackets in JSON.
+    // We look for [history: followed by [ ... ] followed by ]
+    const historyMatch = rawNotes.match(/\[history:(\[[\s\S]*\])\]/);
     if (historyMatch && historyMatch[1]) {
       try {
         history = JSON.parse(historyMatch[1]);
@@ -66,8 +67,8 @@ const mapCard = (card) => {
     console.error("Error matching history regex:", e);
   }
 
-  // Clean all [history:...] tags from the notes
-  const cleanNotes = rawNotes.replace(/\[history:.+?\]/g, "").trim();
+  // Clean the history tag from the notes. We use the same pattern.
+  const cleanNotes = rawNotes.replace(/\[history:\[[\s\S]*\]\]/g, "").trim();
 
   return {
     id: card.id,
@@ -88,7 +89,8 @@ const mapCard = (card) => {
 
 const toDbCard = (card) => {
   // Always clean any existing history tags from notes before appending current history
-  let baseNotes = String(card.notes || "").replace(/\[history:.+?\]/g, "").trim();
+  // Use a robust regex that handles nested brackets in the JSON history array
+  let baseNotes = String(card.notes || "").replace(/\[history:\[[\s\S]*\]\]/g, "").trim();
   let notesWithMeta = baseNotes;
   
   if (card.history && card.history.length > 0) {
