@@ -3,7 +3,7 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInte
 import { fr } from "date-fns/locale";
 import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Phone, Mail, Handshake, Bell, Bookmark, Briefcase, Check, CheckCircle2 } from "lucide-react";
+import { Phone, Mail, Handshake, Bell, Bookmark, Briefcase, Check, CheckCircle2, GraduationCap } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { db } from "@/lib/db";
 import { toast } from "sonner";
@@ -60,6 +60,7 @@ export default function AgendaMonthView({ baseDate, tasks, proposals, onTaskClic
       case "email": return <Mail className="w-2.5 h-2.5" />;
       case "meeting": return <Handshake className="w-2.5 h-2.5" />;
       case "relance": return <Bell className="w-2.5 h-2.5" />;
+      case "formation": return <GraduationCap className="w-2.5 h-2.5" />;
       default: return <Bookmark className="w-2.5 h-2.5" />;
     }
   };
@@ -74,6 +75,7 @@ export default function AgendaMonthView({ baseDate, tasks, proposals, onTaskClic
       case "email": return "bg-purple-500";
       case "meeting": return "bg-green-500";
       case "relance": return "bg-orange-500";
+      case "formation": return "bg-cyan-500";
       default: return "bg-slate-500";
     }
   };

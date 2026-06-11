@@ -71,7 +71,7 @@ export default function UrgencesView() {
     if (e) e.stopPropagation();
     setSelectedTask({ 
       linkedCardId: deal.id, 
-      linkedContactId: deal.contactId || deal.clientId 
+      linkedContactId: deal.contactId || deal.clientId || deal.contact_id || "none"
     });
     setIsTaskDialogOpen(true);
   };

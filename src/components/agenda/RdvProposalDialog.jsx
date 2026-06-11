@@ -346,6 +346,14 @@ export default function RdvProposalDialog({ open, onOpenChange, commercialId, de
                 <SelectItem value="60" className="text-xs">1h</SelectItem>
                 <SelectItem value="90" className="text-xs">1h30</SelectItem>
                 <SelectItem value="120" className="text-xs">2h</SelectItem>
+                <SelectItem value="180" className="text-xs">3h</SelectItem>
+                <SelectItem value="240" className="text-xs">4h</SelectItem>
+                <SelectItem value="300" className="text-xs">5h</SelectItem>
+                <SelectItem value="360" className="text-xs">6h</SelectItem>
+                <SelectItem value="420" className="text-xs">7h</SelectItem>
+                <SelectItem value="480" className="text-xs">8h</SelectItem>
+                <SelectItem value="540" className="text-xs">9h</SelectItem>
+                <SelectItem value="600" className="text-xs">10h</SelectItem>
               </SelectContent>
             </Select>
           </div>

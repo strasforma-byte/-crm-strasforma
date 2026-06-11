@@ -26,6 +26,7 @@ export default function AgendaWeekView({ baseDate, tasks, proposals, targetUser,
       case "email": return "bg-purple-500 border-purple-600";
       case "meeting": return "bg-green-500 border-green-600";
       case "relance": return "bg-orange-500 border-orange-600";
+      case "formation": return "bg-cyan-500 border-cyan-600";
       default: return "bg-slate-500 border-slate-600";
     }
   };

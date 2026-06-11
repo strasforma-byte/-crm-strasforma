@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Card } from "@/components/ui/card";
-import { Phone, Mail, Handshake, Bell, Bookmark, Clock, CheckCircle2, Briefcase, User as UserIcon, X, Redo2 } from "lucide-react";
+import { Phone, Mail, Handshake, Bell, Bookmark, Clock, CheckCircle2, Briefcase, User as UserIcon, X, Redo2, GraduationCap } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { db } from "@/lib/db";
 import { toast } from "sonner";
@@ -182,6 +182,7 @@ export default function AgendaListView({ baseDate, tasks, proposals, onTaskClick
       case "email": return <Mail className="w-4 h-4 text-purple-500" />;
       case "meeting": return <Handshake className="w-4 h-4 text-green-500" />;
       case "relance": return <Bell className="w-4 h-4 text-orange-500" />;
+      case "formation": return <GraduationCap className="w-4 h-4 text-cyan-500" />;
       default: return <Bookmark className="w-4 h-4 text-slate-500" />;
     }
   };

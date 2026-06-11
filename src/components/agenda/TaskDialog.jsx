@@ -193,28 +193,37 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
         
         if (isExistingLocal) {
           savedTask = await db.updateTask(task.id, taskData);
-          const updated = state.tasks.map(t => t.id === task.id ? savedTask : t);
-          dispatch({ type: "UPDATE_TASKS", payload: updated });
+          dispatch({ 
+            type: "UPDATE_TASKS", 
+            payload: (prev) => prev.map(t => t.id === task.id ? savedTask : t) 
+          });
         } else {
           // Conversion d'une tâche Google en tâche interne
-          // On s'assure que le statut n'est plus "external"
           const internalTaskData = { ...taskData, status: "pending" };
           savedTask = await db.insertTask(internalTaskData);
           
-          dispatch({ type: "UPDATE_TASKS", payload: [...state.tasks, savedTask] });
+          dispatch({ 
+            type: "UPDATE_TASKS", 
+            payload: (prev) => [...prev, savedTask] 
+          });
           
-          // Retirer de la liste des événements externes pour éviter les doublons
-          const updatedExternal = (state.externalEvents || []).filter(t => t.id !== task.id);
-          dispatch({ type: "UPDATE_EXTERNAL_EVENTS", payload: updatedExternal });
+          // Retirer de la liste des événements externes
+          dispatch({ 
+            type: "UPDATE_EXTERNAL_EVENTS", 
+            payload: (prev) => (prev || []).filter(t => t.id !== task.id) 
+          });
         }
         
         toast.success("Action mise à jour");
       } else {
         const savedTask = await db.insertTask(taskData);
-        dispatch({ type: "UPDATE_TASKS", payload: [...state.tasks, savedTask] });
+        dispatch({ 
+          type: "UPDATE_TASKS", 
+          payload: (prev) => [...prev, savedTask] 
+        });
 
         // Audit automatique pour les nouvelles tâches liées
-        if (taskData.linkedCardId) {
+        if (taskData.linkedCardId && taskData.linkedCardId !== "none") {
           const pipeline = (Array.isArray(state.pipelines) ? state.pipelines : []).find(p => p.columns.some(col => col.cards.some(c => c.id === taskData.linkedCardId)));
           if (pipeline) {
             const card = pipeline.columns.flatMap(col => col.cards).find(c => c.id === taskData.linkedCardId);
@@ -227,14 +236,16 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
               const updatedCard = { ...card, history: [historyEntry, ...(card.history || [])] };
               await db.updateCard(card.id, updatedCard);
               
-              const updatedPipelines = state.pipelines.map(p => p.id === pipeline.id ? {
-                ...p,
-                columns: p.columns.map(col => ({
-                  ...col,
-                  cards: col.cards.map(c => c.id === card.id ? updatedCard : c)
-                }))
-              } : p);
-              dispatch({ type: "UPDATE_PIPELINES", payload: updatedPipelines });
+              dispatch({ 
+                type: "UPDATE_PIPELINES", 
+                payload: (prev) => prev.map(p => p.id === pipeline.id ? {
+                  ...p,
+                  columns: p.columns.map(col => ({
+                    ...col,
+                    cards: col.cards.map(c => c.id === card.id ? updatedCard : c)
+                  }))
+                } : p)
+              });
             }
           }
         }
@@ -417,6 +428,7 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
                 <SelectItem value="email" className="text-xs">📧 Email</SelectItem>
                 <SelectItem value="meeting" className="text-xs">🤝 RDV</SelectItem>
                 <SelectItem value="relance" className="text-xs">🔔 Relance</SelectItem>
+                <SelectItem value="formation" className="text-xs">🎓 Formation</SelectItem>
                 <SelectItem value="google" className="text-xs">🗓️ Google</SelectItem>
                 <SelectItem value="other" className="text-xs">📌 Autre</SelectItem>
               </SelectContent>
@@ -441,6 +453,12 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
                 <SelectItem value="120" className="text-xs">2h</SelectItem>
                 <SelectItem value="180" className="text-xs">3h</SelectItem>
                 <SelectItem value="240" className="text-xs">4h</SelectItem>
+                <SelectItem value="300" className="text-xs">5h</SelectItem>
+                <SelectItem value="360" className="text-xs">6h</SelectItem>
+                <SelectItem value="420" className="text-xs">7h</SelectItem>
+                <SelectItem value="480" className="text-xs">8h</SelectItem>
+                <SelectItem value="540" className="text-xs">9h</SelectItem>
+                <SelectItem value="600" className="text-xs">10h</SelectItem>
               </SelectContent>
             </Select>
           </div>
