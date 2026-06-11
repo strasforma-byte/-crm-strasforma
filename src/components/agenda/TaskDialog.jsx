@@ -21,7 +21,8 @@ import {
   User as UserIcon,
   Briefcase,
   Loader2,
-  ExternalLink
+  ExternalLink,
+  Phone
 } from "lucide-react";
 import { 
   Command, 
@@ -576,6 +577,30 @@ export default function TaskDialog({ task, open, onOpenChange, defaultContactId,
               </PopoverContent>
             </Popover>
           </div>
+
+          {selectedContact && selectedContact.phone && (
+            <div className="col-span-2 p-2 bg-blue-50 rounded-lg border border-blue-100 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 bg-blue-600 rounded-full flex items-center justify-center text-white">
+                  <Phone className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-blue-700 uppercase leading-none">Numéro de téléphone</p>
+                  <p className="text-xs font-bold text-blue-900 mt-1">{selectedContact.phone}</p>
+                </div>
+              </div>
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-8 text-[11px] font-black text-blue-700 hover:bg-blue-100"
+                asChild
+              >
+                <a href={`tel:${selectedContact.phone}`}>
+                  APPELER
+                </a>
+              </Button>
+            </div>
+          )}
 
           <div className="col-span-2 space-y-1.5">
             <Label className="text-[11px] uppercase font-black tracking-wider text-slate-500">Affaire liée</Label>
