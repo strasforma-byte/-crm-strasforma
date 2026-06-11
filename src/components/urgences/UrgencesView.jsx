@@ -25,7 +25,8 @@ import {
   Redo2,
   Plus,
   AlertTriangle,
-  MessageSquare
+  MessageSquare,
+  GraduationCap
 } from "lucide-react";
 import { format, isSameDay, isToday, isTomorrow, isYesterday, startOfToday, addDays } from "date-fns";
 import { fr } from "date-fns/locale";
@@ -459,6 +460,7 @@ export default function UrgencesView() {
       case "email": return <Mail className="w-4 h-4 text-purple-500" />;
       case "meeting": return <Handshake className="w-4 h-4 text-green-500" />;
       case "relance": return <Bell className="w-4 h-4 text-orange-500" />;
+      case "formation": return <GraduationCap className="w-4 h-4 text-cyan-500" />;
       default: return <Bookmark className="w-4 h-4 text-slate-500" />;
     }
   };

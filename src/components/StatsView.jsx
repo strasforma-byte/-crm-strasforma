@@ -330,6 +330,7 @@ export default function StatsView() {
                 { type: 'meeting', label: 'RDV', color: 'bg-green-500' },
                 { type: 'email', label: 'Emails', color: 'bg-purple-500' },
                 { type: 'relance', label: 'Relances', color: 'bg-orange-500' },
+                { type: 'formation', label: 'Formations', color: 'bg-cyan-500' },
               ].map(item => {
                 const count = (stats.filteredTasks || []).filter(t => t.type === item.type).length;
                 const totalEver = (Array.isArray(state?.tasks) ? state.tasks : []).filter(t => t.type === item.type).length;

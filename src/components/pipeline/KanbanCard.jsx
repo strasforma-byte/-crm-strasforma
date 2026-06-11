@@ -109,20 +109,22 @@ export default function KanbanCard({ card, onClick, isOverlay }) {
     if (actionDate < now && !isToday(actionDate)) return "bg-red-500";
     if (isToday(actionDate)) return "bg-orange-500";
     return "bg-green-500";
-  };
-
-  if (!card) return null;
-
+  Handshake,
+  Bell,
+  GraduationCap,
+  Tag as TagIcon,
+  FileText,
+  ...
   const getTaskIcon = (type) => {
     switch (type) {
       case "call": return <Phone className="w-3 h-3" />;
       case "email": return <Mail className="w-3 h-3" />;
       case "meeting": return <Handshake className="w-3 h-3" />;
       case "relance": return <Bell className="w-3 h-3" />;
+      case "formation": return <GraduationCap className="w-3 h-3" />;
       default: return <Clock className="w-3 h-3" />;
     }
   };
-
   const handleDelete = async (e) => {
     try {
       await db.deleteCard(card.id);
