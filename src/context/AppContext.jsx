@@ -28,17 +28,17 @@ function appReducer(state, action) {
     case "SET_CURRENT_USER":
       return { ...state, currentUser: action.payload };
     case "UPDATE_USERS":
-      return { ...state, users: action.payload };
+      return { ...state, users: typeof action.payload === 'function' ? action.payload(state.users) : action.payload };
     case "UPDATE_PIPELINES":
       return { ...state, pipelines: typeof action.payload === 'function' ? action.payload(state.pipelines) : action.payload };
     case "UPDATE_CONTACTS":
       return { ...state, contacts: typeof action.payload === 'function' ? action.payload(state.contacts) : action.payload };
     case "UPDATE_CONTACT_LISTS":
-      return { ...state, contactLists: action.payload };
+      return { ...state, contactLists: typeof action.payload === 'function' ? action.payload(state.contactLists) : action.payload };
     case "UPDATE_TASKS":
-      return { ...state, tasks: action.payload };
+      return { ...state, tasks: typeof action.payload === 'function' ? action.payload(state.tasks) : action.payload };
     case "UPDATE_EXTERNAL_EVENTS":
-      return { ...state, externalEvents: action.payload };
+      return { ...state, externalEvents: typeof action.payload === 'function' ? action.payload(state.externalEvents) : action.payload };
     case "IMPORT_ICAL_DATA":
       try {
         const jcalData = ICAL.parse(action.payload);
@@ -73,9 +73,9 @@ function appReducer(state, action) {
         return state;
       }
     case "UPDATE_PROPOSALS":
-      return { ...state, rdvProposals: action.payload };
+      return { ...state, rdvProposals: typeof action.payload === 'function' ? action.payload(state.rdvProposals) : action.payload };
     case "UPDATE_NOTIFICATIONS":
-      return { ...state, notifications: action.payload };
+      return { ...state, notifications: typeof action.payload === 'function' ? action.payload(state.notifications) : action.payload };
     case "LOGOUT":
       return { ...initialState, loading: false };
     default:

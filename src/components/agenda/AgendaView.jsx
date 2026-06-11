@@ -21,7 +21,13 @@ export default function AgendaView() {
 
   const [view, setView] = useState("week");
   const [baseDate, setBaseDate] = useState(new Date());
-  const [targetUserId, setTargetUserId] = useState(state.currentUser?.id);
+  
+  // Initialize targetUserId from localStorage if available, otherwise default to current user
+  const [targetUserId, setTargetUserId] = useState(() => {
+    const saved = localStorage.getItem("paff_agenda_default_user");
+    return saved || null;
+  });
+
   const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [isProposalSheetOpen, setIsProposalSheetOpen] = useState(false);
@@ -32,6 +38,13 @@ export default function AgendaView() {
       setTargetUserId(state.currentUser.id);
     }
   }, [state.currentUser?.id, targetUserId]);
+
+  // Persist targetUserId changes to localStorage
+  const handleTargetUserChange = (val) => {
+    setTargetUserId(val);
+    localStorage.setItem("paff_agenda_default_user", val);
+    toast.success(val === "all" ? "Vue d'ensemble définie par défaut" : "Filtre mémorisé");
+  };
 
   const handlePrev = () => {
     if (view === "month") setBaseDate(subMonths(baseDate, 1));
@@ -160,7 +173,7 @@ export default function AgendaView() {
           </span>
           
           {(isAdmin || isProspecteur) && state.currentUser && (
-            <Select value={targetUserId} onValueChange={setTargetUserId}>
+            <Select value={targetUserId} onValueChange={handleTargetUserChange}>
               <SelectTrigger className="w-[200px] h-10 bg-white border-slate-200 font-bold text-xs">
                 <div className="flex items-center gap-2">
                   <UserIcon className="w-4 h-4 text-slate-400" />
