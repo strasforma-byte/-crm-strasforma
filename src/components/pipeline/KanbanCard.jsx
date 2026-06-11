@@ -17,7 +17,8 @@ import {
   Tag as TagIcon,
   FileText,
   Trash2,
-  Calendar
+  Calendar,
+  GraduationCap
 } from "lucide-react";
 import { useApp } from "@/context/AppContext";
 import { cn } from "@/lib/utils";
@@ -109,12 +110,8 @@ export default function KanbanCard({ card, onClick, isOverlay }) {
     if (actionDate < now && !isToday(actionDate)) return "bg-red-500";
     if (isToday(actionDate)) return "bg-orange-500";
     return "bg-green-500";
-  Handshake,
-  Bell,
-  GraduationCap,
-  Tag as TagIcon,
-  FileText,
-  ...
+  };
+
   const getTaskIcon = (type) => {
     switch (type) {
       case "call": return <Phone className="w-3 h-3" />;
@@ -125,6 +122,7 @@ export default function KanbanCard({ card, onClick, isOverlay }) {
       default: return <Clock className="w-3 h-3" />;
     }
   };
+
   const handleDelete = async (e) => {
     try {
       await db.deleteCard(card.id);
